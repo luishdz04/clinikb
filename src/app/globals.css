@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Fix Ant Design Header */
+.ant-layout-header {
+  background: white !important;
+  line-height: normal !important;
+  height: auto !important;
+  padding: 0 !important;
+}
+
+.ant-menu-horizontal {
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
+.ant-menu-horizontal > .ant-menu-item::after,
+.ant-menu-horizontal > .ant-menu-submenu::after {
+  border-bottom-width: 3px !important;
+}
+
+.ant-menu-horizontal > .ant-menu-item-selected::after {
+  border-bottom-color: #55c5c4 !important;
+}
