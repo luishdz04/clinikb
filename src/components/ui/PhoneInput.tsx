@@ -1,12 +1,11 @@
 "use client";
 
 import PhoneInputWithCountry from "react-phone-number-input";
-import type { E164Number } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
 export interface PhoneInputProps {
-  value?: E164Number;
-  onChange?: (value: E164Number | undefined) => void;
+  value?: string;
+  onChange?: (value: string | undefined) => void;
   placeholder?: string;
   defaultCountry?: string;
   className?: string;
