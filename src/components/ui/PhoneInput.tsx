@@ -22,8 +22,8 @@ export function PhoneInput({
     <PhoneInputWithCountry
       international
       defaultCountry={defaultCountry as any}
-      value={value}
-      onChange={onChange}
+      value={value as any}
+      onChange={onChange as any}
       placeholder={placeholder}
       className={className}
       numberInputProps={{
