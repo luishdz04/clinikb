@@ -56,6 +56,8 @@ const theme: ThemeConfig = {
       // Menú con colores del tema
       itemSelectedBg: colors.primary + "15",
       itemSelectedColor: colors.primaryDark,
+      itemHoverColor: colors.primary,
+      itemActiveBg: colors.primary + "20",
     },
   },
 };

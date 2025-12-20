@@ -4,14 +4,13 @@ import { Layout, Menu, Button, Space, Dropdown } from "antd";
 import {
   HomeOutlined,
   UserOutlined,
-  CalendarOutlined,
   MedicineBoxOutlined,
   MenuOutlined,
-  LoginOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 const menuItems = [
   {
@@ -25,11 +24,6 @@ const menuItems = [
     label: <Link href="/servicios">Servicios</Link>,
   },
   {
-    key: "appointments",
-    icon: <CalendarOutlined />,
-    label: <Link href="/citas">Citas</Link>,
-  },
-  {
     key: "about",
     icon: <UserOutlined />,
     label: <Link href="/nosotros">Nosotros</Link>,
@@ -37,7 +31,23 @@ const menuItems = [
 ];
 
 export default function Header() {
-  const [current, setCurrent] = useState("home");
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const pathToKey: Record<string, string> = useMemo(
+    () => ({ "/": "home", "/servicios": "services", "/nosotros": "about" }),
+    []
+  );
+  const keyToPath: Record<string, string> = useMemo(
+    () => ({ home: "/", services: "/servicios", about: "/nosotros" }),
+    []
+  );
+
+  const [current, setCurrent] = useState(pathToKey[pathname] ?? "home");
+
+  useEffect(() => {
+    setCurrent(pathToKey[pathname] ?? "home");
+  }, [pathname, pathToKey]);
 
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between bg-white px-4 py-2 shadow-sm lg:px-8">
@@ -57,7 +67,11 @@ export default function Header() {
       <Menu
         mode="horizontal"
         selectedKeys={[current]}
-        onClick={(e) => setCurrent(e.key)}
+        onClick={(e) => {
+          setCurrent(e.key);
+          const path = keyToPath[e.key as keyof typeof keyToPath];
+          if (path) router.push(path);
+        }}
         items={menuItems}
         className="hidden flex-1 justify-center border-none bg-transparent lg:flex"
         style={{ minWidth: 0, flex: "auto", justifyContent: "center" }}
@@ -65,17 +79,23 @@ export default function Header() {
 
       {/* Actions */}
       <Space className="hidden lg:flex">
-        <Button type="default" icon={<LoginOutlined />}>
-          Iniciar Sesión
-        </Button>
-        <Button type="primary">
-          Agendar Cita
-        </Button>
+        <Link href="/registro">
+          <Button type="primary" size="large">
+            Agendar Cita
+          </Button>
+        </Link>
       </Space>
 
       {/* Mobile Menu */}
       <Dropdown
-        menu={{ items: menuItems, onClick: (e) => setCurrent(e.key) }}
+        menu={{
+          items: menuItems,
+          onClick: (e) => {
+            setCurrent(e.key);
+            const path = keyToPath[e.key as keyof typeof keyToPath];
+            if (path) router.push(path);
+          },
+        }}
         trigger={["click"]}
         className="lg:hidden"
       >

@@ -4,44 +4,39 @@ import { Card, Typography, Row, Col } from "antd";
 import {
   HeartOutlined,
   MedicineBoxOutlined,
-  ExperimentOutlined,
   TeamOutlined,
   SafetyOutlined,
   ClockCircleOutlined,
 } from "@ant-design/icons";
+import { psychologicalServices, medicalServices } from "@/data/services";
 
 const { Title, Paragraph } = Typography;
 
-const services = [
+const servicesSummary = [
   {
     icon: <HeartOutlined className="text-4xl text-[#55c5c4]" />,
-    title: "Medicina General",
-    description: "Atención médica integral para toda la familia con enfoque preventivo.",
-  },
-  {
-    icon: <MedicineBoxOutlined className="text-4xl text-[#55c5c4]" />,
-    title: "Especialidades",
-    description: "Contamos con especialistas en diversas áreas de la medicina.",
-  },
-  {
-    icon: <ExperimentOutlined className="text-4xl text-[#55c5c4]" />,
-    title: "Laboratorio",
-    description: "Análisis clínicos con tecnología de punta y resultados rápidos.",
+    title: psychologicalServices[0].title,
+    description: psychologicalServices[0].description,
   },
   {
     icon: <TeamOutlined className="text-4xl text-[#55c5c4]" />,
-    title: "Atención Personalizada",
-    description: "Cada paciente recibe un trato único y personalizado.",
+    title: psychologicalServices[1].title,
+    description: psychologicalServices[1].description,
   },
   {
     icon: <SafetyOutlined className="text-4xl text-[#55c5c4]" />,
-    title: "Seguridad",
-    description: "Protocolos estrictos de higiene y seguridad para tu tranquilidad.",
+    title: psychologicalServices[2].title,
+    description: psychologicalServices[2].description,
+  },
+  {
+    icon: <MedicineBoxOutlined className="text-4xl text-[#55c5c4]" />,
+    title: medicalServices[0].title,
+    description: medicalServices[0].description,
   },
   {
     icon: <ClockCircleOutlined className="text-4xl text-[#55c5c4]" />,
-    title: "Horarios Flexibles",
-    description: "Disponibilidad amplia para adaptarnos a tu agenda.",
+    title: medicalServices[1].title,
+    description: medicalServices[1].description,
   },
 ];
 
@@ -59,7 +54,7 @@ export default function ServicesSection() {
         </div>
 
         <Row gutter={[24, 24]}>
-          {services.map((service, index) => (
+          {servicesSummary.map((service, index) => (
             <Col xs={24} sm={12} lg={8} key={index}>
               <Card 
                 hoverable 

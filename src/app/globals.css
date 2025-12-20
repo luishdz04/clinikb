@@ -39,3 +39,47 @@ body {
 .ant-menu-horizontal > .ant-menu-item-selected::after {
   border-bottom-color: #55c5c4 !important;
 }
+
+.ant-menu-horizontal > .ant-menu-item-selected {
+  color: #367c84 !important;
+  font-weight: 600;
+}
+
+.ant-menu-horizontal > .ant-menu-item:hover {
+  color: #55c5c4 !important;
+}
+
+/* Alert custom colors */
+.ant-alert-success {
+  background-color: #f0faf9;
+  border-color: #55c5c4;
+}
+
+.ant-alert-success .ant-alert-icon {
+  color: #55c5c4;
+}
+
+.ant-alert-warning {
+  background-color: #e6f7f7;
+  border-color: #55c5c4;
+}
+
+.ant-alert-warning .ant-alert-icon {
+  color: #367c84;
+}
+
+.ant-alert-warning a {
+  color: #845c24 !important;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.ant-alert-warning a:hover {
+  color: #5b5035 !important;
+}
+
+/* Card hover improvements */
+.ant-card-hoverable:hover {
+  border-color: #55c5c4 !important;
+  box-shadow: 0 4px 12px rgba(85, 197, 196, 0.15) !important;
+}

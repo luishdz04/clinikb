@@ -66,7 +66,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center gap-2">
                 <PhoneOutlined className="text-[#55c5c4]" />
-                <span>(123) 456-7890</span>
+                <span>866 159 7283</span>
               </div>
               <div className="flex items-center gap-2">
                 <MailOutlined className="text-[#55c5c4]" />
