@@ -34,20 +34,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Crear usuario en Auth con generateLink (no confirmado hasta aprobación)
-    const origin = request.headers.get('origin') || 'http://localhost:3000';
-    const { data: authData, error: authError } = await adminSupabase.auth.admin.generateLink({
-      type: 'signup',
+    // Crear usuario en Auth (sin auto-confirmación hasta aprobación)
+    const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
       email: formData.email,
       password: formData.password,
-      options: {
-        redirectTo: `${origin}/cliente/dashboard`,
-        data: {
-          full_name: formData.full_name,
-          phone: formData.phone,
-          role: 'patient',
-          status: 'pending', // Guardamos status en metadata
-        },
+      email_confirm: false, // No confirmar hasta que sea aprobado
+      user_metadata: {
+        full_name: formData.full_name,
+        phone: formData.phone,
+        role: 'patient',
+        status: 'pending',
       },
     });
 

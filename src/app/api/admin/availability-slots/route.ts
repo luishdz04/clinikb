@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       startTime,
       endTime,
       maxAppointments = 1,
+      modality = 'online',
       notes,
     } = body;
 
@@ -162,6 +163,7 @@ export async function POST(request: NextRequest) {
         start_time: startTime,
         end_time: endTime,
         max_appointments: maxAppointments,
+        modality: modality,
         notes: notes || null,
         is_available: true,
       })
@@ -207,6 +209,7 @@ export async function PUT(request: NextRequest) {
       startTime,
       endTime,
       maxAppointments,
+      modality,
       notes,
       isAvailable,
     } = body;
@@ -246,6 +249,7 @@ export async function PUT(request: NextRequest) {
     if (startTime !== undefined) updateData.start_time = startTime;
     if (endTime !== undefined) updateData.end_time = endTime;
     if (maxAppointments !== undefined) updateData.max_appointments = maxAppointments;
+    if (modality !== undefined) updateData.modality = modality;
     if (notes !== undefined) updateData.notes = notes;
     if (isAvailable !== undefined) updateData.is_available = isAvailable;
 

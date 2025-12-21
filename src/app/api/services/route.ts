@@ -35,7 +35,7 @@ export async function GET() {
 // POST - Crear nuevo servicio
 export async function POST(request: Request) {
   try {
-    const { key, title, category, duration_minutes, description } = await request.json();
+    const { key, title, category, duration_minutes, description, available_modalities } = await request.json();
 
     if (!key || !title || !category || !duration_minutes) {
       return NextResponse.json(
@@ -61,6 +61,7 @@ export async function POST(request: Request) {
         duration_minutes,
         description,
         active: true,
+        available_modalities: available_modalities || ['online', 'presencial'],
       })
       .select()
       .single();
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
 // PUT - Actualizar servicio
 export async function PUT(request: Request) {
   try {
-    const { id, title, category, duration_minutes, description, active } = await request.json();
+    const { id, title, category, duration_minutes, description, active, available_modalities } = await request.json();
 
     if (!id) {
       return NextResponse.json(
@@ -117,6 +118,7 @@ export async function PUT(request: Request) {
         duration_minutes,
         description,
         active,
+        available_modalities: available_modalities || ['online', 'presencial'],
       })
       .eq('id', id)
       .select()

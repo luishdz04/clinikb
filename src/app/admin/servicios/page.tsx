@@ -50,6 +50,7 @@ export default function ServiciosPage() {
       duration_minutes: service.duration_minutes,
       description: service.description,
       active: service.active,
+      available_modalities: service.available_modalities || ['online', 'presencial'],
     });
     setModalVisible(true);
   };
@@ -150,6 +151,23 @@ export default function ServiciosPage() {
       width: 120,
     },
     {
+      title: 'Modalidades',
+      dataIndex: 'available_modalities',
+      key: 'available_modalities',
+      render: (modalities: string[]) => (
+        <Space size={4}>
+          {modalities && modalities.includes('online') && (
+            <Tag color="blue">💻 Online</Tag>
+          )}
+          {modalities && modalities.includes('presencial') && (
+            <Tag color="green">🏥 Presencial</Tag>
+          )}
+          {!modalities && <Tag>Sin definir</Tag>}
+        </Space>
+      ),
+      width: 180,
+    },
+    {
       title: 'Estado',
       dataIndex: 'active',
       key: 'active',
@@ -237,7 +255,11 @@ export default function ServiciosPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ active: true, duration_minutes: 60 }}
+          initialValues={{ 
+            active: true, 
+            duration_minutes: 60,
+            available_modalities: ['online', 'presencial']
+          }}
         >
           <Form.Item
             name="title"
@@ -276,6 +298,22 @@ export default function ServiciosPage() {
             rules={[{ required: true, message: 'Campo requerido' }]}
           >
             <InputNumber min={15} max={240} step={15} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="available_modalities"
+            label="Modalidades disponibles"
+            rules={[{ required: true, message: 'Selecciona al menos una modalidad' }]}
+            help="¿Cómo se puede ofrecer este servicio?"
+          >
+            <Select
+              mode="multiple"
+              placeholder="Selecciona las modalidades"
+              options={[
+                { label: '💻 En línea (videollamada)', value: 'online' },
+                { label: '🏥 Presencial (en consultorio)', value: 'presencial' },
+              ]}
+            />
           </Form.Item>
 
           <Form.Item

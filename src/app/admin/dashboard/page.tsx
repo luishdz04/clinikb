@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Typography, Card, Row, Col, Statistic, Table, Tag, Button, Modal, Input, Space, App } from "antd";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import "dayjs/locale/es";
+
+dayjs.extend(utc);
+dayjs.locale("es");
 import { UserOutlined, CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, EyeOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 
@@ -344,7 +350,7 @@ export default function AdminDashboard() {
             <div>
               <Text strong>Fecha de Nacimiento:</Text>
               <br />
-              <Text>{new Date(selectedPatient.date_of_birth).toLocaleDateString("es-MX")}</Text>
+              <Text>{dayjs.utc(selectedPatient.date_of_birth).format("DD/MM/YYYY")}</Text>
             </div>
             <div>
               <Text strong>Tipo de Atención:</Text>

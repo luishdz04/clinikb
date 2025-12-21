@@ -4,6 +4,12 @@ import { useState, useEffect } from "react";
 import { Typography, Card, Row, Col, Alert, Spin, Descriptions, Tag } from "antd";
 import { UserOutlined, PhoneOutlined, MailOutlined, CalendarOutlined, MedicineBoxOutlined } from "@ant-design/icons";
 import { createClient } from "@/lib/supabase/client";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import "dayjs/locale/es";
+
+dayjs.extend(utc);
+dayjs.locale("es");
 
 const { Title, Paragraph } = Typography;
 
@@ -76,7 +82,7 @@ export default function ClienteDashboard() {
   }
 
   const age = patient.date_of_birth
-    ? new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()
+    ? dayjs().diff(dayjs.utc(patient.date_of_birth), "year")
     : null;
 
   return (
@@ -110,7 +116,7 @@ export default function ClienteDashboard() {
                 {patient.full_name}
               </Descriptions.Item>
               <Descriptions.Item label="Fecha de Nacimiento">
-                {new Date(patient.date_of_birth).toLocaleDateString("es-MX")}
+                {dayjs.utc(patient.date_of_birth).format("DD/MM/YYYY")}
                 {age && ` (${age} años)`}
               </Descriptions.Item>
               {patient.gender && (

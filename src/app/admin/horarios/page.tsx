@@ -57,6 +57,7 @@ interface AvailabilitySlot {
   end_time: string;
   is_available: boolean;
   max_appointments: number;
+  modality?: string;
   notes?: string;
   service?: Service;
 }
@@ -160,6 +161,7 @@ export default function HorariosPage() {
           dayjs(slot.end_time, "HH:mm:ss").tz(MONTERREY_TZ),
         ],
         maxAppointments: slot.max_appointments,
+        modality: slot.modality || 'online',
         notes: slot.notes,
       });
     } else {
@@ -168,6 +170,7 @@ export default function HorariosPage() {
       form.setFieldsValue({
         slotDate: date || selectedDate,
         maxAppointments: 1,
+        modality: 'online',
       });
     }
     setIsModalOpen(true);
@@ -193,6 +196,7 @@ export default function HorariosPage() {
         startTime,
         endTime,
         maxAppointments: values.maxAppointments,
+        modality: values.modality,
         notes: values.notes,
       };
 
@@ -360,6 +364,16 @@ export default function HorariosPage() {
       render: (max: number) => `${max} cita${max !== 1 ? "s" : ""}`,
     },
     {
+      title: "Modalidad",
+      dataIndex: "modality",
+      key: "modality",
+      render: (modality: string) => (
+        <Tag color={modality === 'online' ? 'blue' : 'green'}>
+          {modality === 'online' ? '💻 Online' : '🏥 Presencial'}
+        </Tag>
+      ),
+    },
+    {
       title: "Estado",
       dataIndex: "is_available",
       key: "status",
@@ -511,12 +525,17 @@ export default function HorariosPage() {
                         {slot.end_time.substring(0, 5)}
                       </span>
                     </Space>
-                    <Tag
-                      color={slot.is_available ? "success" : "default"}
-                      className="w-fit"
-                    >
-                      {slot.is_available ? "Disponible" : "No disponible"}
-                    </Tag>
+                    <Space size="small">
+                      <Tag color={slot.modality === 'online' ? 'blue' : 'green'}>
+                        {slot.modality === 'online' ? '💻 Online' : '🏥 Presencial'}
+                      </Tag>
+                      <Tag
+                        color={slot.is_available ? "success" : "default"}
+                        className="w-fit"
+                      >
+                        {slot.is_available ? "Disponible" : "No disponible"}
+                      </Tag>
+                    </Space>
                     {slot.notes && (
                       <p className="text-xs text-gray-500 mt-1">{slot.notes}</p>
                     )}
@@ -601,6 +620,17 @@ export default function HorariosPage() {
             ]}
           >
             <InputNumber min={1} max={10} className="w-full" />
+          </Form.Item>
+
+          <Form.Item
+            name="modality"
+            label="Modalidad del horario"
+            rules={[{ required: true, message: "Selecciona la modalidad" }]}
+          >
+            <Select placeholder="¿Online o presencial?">
+              <Select.Option value="online">💻 En línea (videollamada)</Select.Option>
+              <Select.Option value="presencial">🏥 Presencial (consultorio)</Select.Option>
+            </Select>
           </Form.Item>
 
           <Form.Item name="notes" label="Notas (opcional)">

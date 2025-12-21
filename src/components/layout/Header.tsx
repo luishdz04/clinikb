@@ -59,6 +59,7 @@ export default function Header() {
           width={50}
           height={50}
           priority
+          loading="eager"
           className="rounded-full"
         />
       </Link>
@@ -79,6 +80,11 @@ export default function Header() {
 
       {/* Actions */}
       <Space className="hidden lg:flex">
+        <Link href="/login">
+          <Button size="large">
+            Iniciar Sesión
+          </Button>
+        </Link>
         <Link href="/registro">
           <Button type="primary" size="large">
             Agendar Cita
@@ -87,20 +93,31 @@ export default function Header() {
       </Space>
 
       {/* Mobile Menu */}
-      <Dropdown
-        menu={{
-          items: menuItems,
-          onClick: (e) => {
-            setCurrent(e.key);
-            const path = keyToPath[e.key as keyof typeof keyToPath];
-            if (path) router.push(path);
-          },
-        }}
-        trigger={["click"]}
-        className="lg:hidden"
-      >
-        <Button type="text" icon={<MenuOutlined className="text-xl" />} />
-      </Dropdown>
+      <div className="flex items-center gap-2 lg:hidden">
+        <Link href="/login">
+          <Button size="middle">
+            Iniciar Sesión
+          </Button>
+        </Link>
+        <Link href="/registro">
+          <Button type="primary" size="middle">
+            Agendar Cita
+          </Button>
+        </Link>
+        <Dropdown
+          menu={{
+            items: menuItems,
+            onClick: (e) => {
+              setCurrent(e.key);
+              const path = keyToPath[e.key as keyof typeof keyToPath];
+              if (path) router.push(path);
+            },
+          }}
+          trigger={["click"]}
+        >
+          <Button type="text" icon={<MenuOutlined className="text-xl" />} />
+        </Dropdown>
+      </div>
     </header>
   );
 }

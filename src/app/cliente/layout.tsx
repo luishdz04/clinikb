@@ -279,9 +279,6 @@ export default function ClienteLayout({ children }: ClienteLayoutProps) {
                 style={{ fontSize: "18px" }}
               />
             )}
-            <Text strong style={{ fontSize: isMobile ? "16px" : "18px", color: "#55c5c4" }}>
-              Portal de Pacientes
-            </Text>
           </div>
 
           <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
@@ -322,7 +319,7 @@ export default function ClienteLayout({ children }: ClienteLayoutProps) {
 
         {/* Footer */}
         <Footer style={{ textAlign: "center", background: "#f5f5f5" }}>
-          CliniKB © {new Date().getFullYear()} - Portal de Pacientes
+          CliniKB © {new Date().getFullYear()}
         </Footer>
       </Layout>
     </Layout>
