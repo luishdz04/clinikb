@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# mcp (contiene tokens de acceso)
+.mcp.json
+
 # supabase
 /supabase/.temp
 /supabase/functions/.temp
@@ -46,4 +49,3 @@ next-env.d.ts
 
 # otros proyectos
 muscleupgym-renueve-main/
-proxy.ts

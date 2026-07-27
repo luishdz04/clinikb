@@ -1,61 +1,73 @@
 "use client";
 
-import { Button, Typography, Space } from "antd";
+import { Button, Typography, Flex, Row, Col, theme } from "antd";
 import { CalendarOutlined, PhoneOutlined } from "@ant-design/icons";
 import Image from "next/image";
+import { colors } from "@/theme/themeConfig";
 
 const { Title, Paragraph } = Typography;
 
 export default function HeroSection() {
-  return (
-    <section className="relative bg-gradient-to-br from-[#55c5c4]/10 via-white to-[#dfc79c]/10 py-16 lg:py-24">
-      <div className="mx-auto max-w-7xl px-4 lg:px-8">
-        <div className="grid items-center gap-12 lg:grid-cols-2">
-          {/* Contenido */}
-          <div className="text-center lg:text-left">
-            <Title level={1} className="!text-4xl !font-bold !text-[#060807] lg:!text-5xl">
-              Tu Bienestar, Nuestra{" "}
-              <span className="text-[#55c5c4]">Prioridad</span>
-            </Title>
-            <Paragraph className="mt-4 text-lg text-gray-600">
-              Ofrecemos atención psicológica y médica integral. Nuestro equipo está 
-              conformado por la Dra. Cynthia Kristell de Luna Hernández, Doctora en Psicología 
-              con Maestría en Psicoterapia Cognitivo Conductual, y el Dr. Baldo Daniel 
-              Martínez González, Especialista en Medicina Familiar.
-            </Paragraph>
-            <Space size="large" className="mt-8">
-              <Button 
-                type="primary" 
-                size="large" 
-                icon={<CalendarOutlined />}
-                className="h-12 px-8 text-base"
-              >
-                Agendar Cita
-              </Button>
-              <Button 
-                size="large" 
-                icon={<PhoneOutlined />}
-                className="h-12 px-8 text-base"
-              >
-                Contáctanos
-              </Button>
-            </Space>
-          </div>
+  const { token } = theme.useToken();
 
-          {/* Imagen/Ilustración */}
-          <div className="flex justify-center lg:justify-end">
-            <div className="relative h-80 w-80 lg:h-96 lg:w-96 overflow-hidden rounded-full shadow-2xl border-4 border-[#55c5c4]">
+  return (
+    <section
+      style={{
+        padding: `${token.sizeXXL * 1.5}px ${token.padding}px`,
+        backgroundImage: `linear-gradient(to bottom right, ${colors.primary}1a, ${colors.white} 50%, ${colors.gold}1a)`,
+      }}
+    >
+      <Row
+        gutter={[token.sizeXXL, token.sizeXXL]}
+        align="middle"
+        style={{ maxWidth: 1280, margin: "0 auto" }}
+      >
+        <Col xs={24} lg={12}>
+          <Title level={1} style={{ marginTop: 0, color: colors.dark }}>
+            Tu Bienestar, Nuestra{" "}
+            <span style={{ color: token.colorPrimary }}>Prioridad</span>
+          </Title>
+          <Paragraph type="secondary" style={{ fontSize: token.fontSizeLG }}>
+            Ofrecemos atención psicológica y médica integral. Nuestro equipo está
+            conformado por la Dra. Cynthia Kristell de Luna Hernández, Doctora en
+            Psicología con Maestría en Psicoterapia Cognitivo Conductual, y el Dr. Baldo
+            Daniel Martínez González, Especialista en Medicina Familiar.
+          </Paragraph>
+          <Flex gap="middle" wrap style={{ marginTop: token.marginXL }}>
+            <Button type="primary" size="large" icon={<CalendarOutlined />}>
+              Agendar Cita
+            </Button>
+            <Button size="large" icon={<PhoneOutlined />}>
+              Contáctanos
+            </Button>
+          </Flex>
+        </Col>
+
+        <Col xs={24} lg={12}>
+          <Flex justify="center">
+            <div
+              style={{
+                position: "relative",
+                width: "min(100%, 384px)",
+                aspectRatio: "1",
+                borderRadius: "50%",
+                overflow: "hidden",
+                border: `4px solid ${token.colorPrimary}`,
+                boxShadow: token.boxShadowSecondary,
+              }}
+            >
               <Image
                 src="/images/team/psic.png"
                 alt="Psic. Cynthia Kristell de Luna Hernández"
                 fill
-                className="object-cover"
+                sizes="(max-width: 992px) 100vw, 384px"
+                style={{ objectFit: "cover" }}
                 priority
               />
             </div>
-          </div>
-        </div>
-      </div>
+          </Flex>
+        </Col>
+      </Row>
     </section>
   );
 }

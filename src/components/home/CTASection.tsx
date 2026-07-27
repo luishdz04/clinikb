@@ -1,39 +1,74 @@
 "use client";
 
-import { Button, Typography, Space } from "antd";
+import { Button, Typography, Flex, ConfigProvider, theme } from "antd";
 import { CalendarOutlined, WhatsAppOutlined } from "@ant-design/icons";
+import { colors } from "@/theme/themeConfig";
 
 const { Title, Paragraph } = Typography;
 
+/**
+ * Tokens locales para los botones sobre el degradado de marca.
+ *
+ * En antd v6 los colores de Button se resuelven con variables CSS propias, así
+ * que hay que configurarlos como tokens: cualquier override externo pierde.
+ */
+const onBrandTheme = {
+  components: {
+    Button: {
+      // Sólido blanco
+      defaultBg: colors.white,
+      defaultColor: colors.primaryDark,
+      defaultBorderColor: colors.white,
+      defaultHoverBg: colors.white,
+      defaultHoverColor: colors.dark,
+      defaultHoverBorderColor: colors.white,
+      defaultActiveBg: colors.white,
+      defaultActiveColor: colors.primaryDark,
+      defaultActiveBorderColor: colors.white,
+      // Fantasma (borde y texto blancos)
+      defaultGhostColor: colors.white,
+      defaultGhostBorderColor: colors.white,
+    },
+  },
+};
+
 export default function CTASection() {
+  const { token } = theme.useToken();
+
   return (
-    <section className="bg-gradient-to-r from-[#55c5c4] to-[#367c84] py-16 lg:py-20">
-      <div className="mx-auto max-w-4xl px-4 text-center lg:px-8">
-        <Title level={2} className="!text-3xl !font-bold !text-white lg:!text-4xl">
+    <section
+      style={{
+        padding: `${token.sizeXXL * 1.5}px ${token.padding}px`,
+        // Va de `primaryDark` a `primaryDeep`: sobre `primary` el texto blanco
+        // daría 2.06:1 y no pasaría WCAG AA.
+        backgroundImage: `linear-gradient(to right, ${colors.primaryDark}, ${colors.primaryDeep})`,
+      }}
+    >
+      <Flex
+        vertical
+        align="center"
+        gap="small"
+        style={{ maxWidth: 896, margin: "0 auto", textAlign: "center" }}
+      >
+        <Title level={2} style={{ marginTop: 0, color: colors.white }}>
           ¿Listo para cuidar tu salud?
         </Title>
-        <Paragraph className="mt-4 text-lg text-white/90">
-          Agenda tu cita hoy mismo y da el primer paso hacia una vida más saludable.
-          Nuestro equipo está listo para atenderte.
+        <Paragraph style={{ fontSize: token.fontSizeLG, color: colors.white, marginBottom: 0 }}>
+          Agenda tu cita hoy mismo y da el primer paso hacia una vida más saludable. Nuestro
+          equipo está listo para atenderte.
         </Paragraph>
-        <Space size="large" className="mt-8">
-          <Button 
-            size="large" 
-            icon={<CalendarOutlined />}
-            className="h-12 border-white bg-white px-8 text-base text-[#367c84] hover:!bg-white/90 hover:!text-[#367c84]"
-          >
-            Agendar Cita
-          </Button>
-          <Button 
-            size="large" 
-            icon={<WhatsAppOutlined />}
-            className="h-12 border-white px-8 text-base text-white hover:!bg-white/10 hover:!text-white"
-            ghost
-          >
-            WhatsApp
-          </Button>
-        </Space>
-      </div>
+
+        <ConfigProvider theme={onBrandTheme}>
+          <Flex gap="middle" wrap justify="center" style={{ marginTop: token.marginXL }}>
+            <Button size="large" icon={<CalendarOutlined />}>
+              Agendar Cita
+            </Button>
+            <Button size="large" ghost icon={<WhatsAppOutlined />}>
+              WhatsApp
+            </Button>
+          </Flex>
+        </ConfigProvider>
+      </Flex>
     </section>
   );
 }

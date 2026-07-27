@@ -12,9 +12,9 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   return (
-    <Layout className="min-h-screen">
+    <Layout style={{ minHeight: "100vh" }}>
       <Header />
-      <Content className="flex-1">{children}</Content>
+      <Content style={{ flex: 1 }}>{children}</Content>
       <Footer />
     </Layout>
   );

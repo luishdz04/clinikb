@@ -1,6 +1,6 @@
 "use client";
 
-import { Layout, Typography, Space, Divider } from "antd";
+import { Layout, Typography, Flex, Row, Col, Divider, theme } from "antd";
 import {
   PhoneOutlined,
   MailOutlined,
@@ -10,97 +10,122 @@ import {
   WhatsAppOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
-import Link from "next/link";
+import { colors } from "@/theme/themeConfig";
 
 const { Footer: AntFooter } = Layout;
-const { Text, Title } = Typography;
+const { Text, Title, Link: AntLink } = Typography;
+
+const team = [
+  {
+    area: "Atención Médica",
+    name: "Dr. Baldo Daniel Martínez González",
+    details: ["Especialista en Medicina Familiar"],
+  },
+  {
+    area: "Atención Psicológica",
+    name: "Dra. Cynthia Kristell de Luna Hernández",
+    details: ["Doctora en Psicología", "Maestría en Psicoterapia Cognitivo Conductual"],
+  },
+];
+
+const contact = [
+  { Icon: EnvironmentOutlined, text: "Juárez 145, San Buenaventura, Coahuila, México" },
+  { Icon: PhoneOutlined, text: "866 159 7283" },
+  { Icon: MailOutlined, text: "contacto@clinikb.com" },
+];
+
+const socials = [FacebookOutlined, InstagramOutlined, WhatsAppOutlined];
 
 export default function Footer() {
+  const { token } = theme.useToken();
+
+  // El footer va sobre fondo oscuro, así que el texto no puede usar los
+  // `type="secondary"` del tema claro.
+  const muted = { color: "rgba(255,255,255,0.65)" };
+  const faint = { color: "rgba(255,255,255,0.45)", fontSize: token.fontSizeSM };
+
   return (
-    <AntFooter className="bg-[#060807] px-4 py-12 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
-          {/* Logo y descripción */}
-          <div>
+    <AntFooter
+      style={{
+        background: colors.dark,
+        padding: `${token.sizeXXL}px ${token.padding}px`,
+      }}
+    >
+      <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+        <Row gutter={[token.sizeXXL, token.sizeXXL]}>
+          <Col xs={24} md={12} lg={6}>
             <Image
               src="/images/logo/clinikb.png"
-              alt="CliniKB Logo"
-              width={150}
-              height={60}
-              className="mb-4"
+              alt="CliniKB"
+              width={120}
+              height={120}
+              style={{ borderRadius: "50%", marginBottom: token.margin }}
             />
-            <p className="text-gray-400">
+            <Text style={muted}>
               Atención psicológica y médica de calidad. Tu bienestar es nuestra prioridad.
-            </p>
-          </div>
+            </Text>
+          </Col>
 
-          {/* Nuestro Equipo */}
-          <div>
-            <h4 className="text-[#dfc79c] font-semibold text-lg mb-4">
+          <Col xs={24} md={12} lg={6}>
+            <Title level={5} style={{ color: colors.gold, marginTop: 0 }}>
               Nuestro Equipo
-            </h4>
-            <div className="space-y-3">
-              <div>
-                <p className="text-[#55c5c4] font-medium">Atención Médica</p>
-                <p className="text-gray-400 text-sm">Dr. Baldo Daniel Martínez González</p>
-                <p className="text-gray-500 text-xs">Especialista en Medicina Familiar</p>
-              </div>
-              <div>
-                <p className="text-[#55c5c4] font-medium">Atención Psicológica</p>
-                <p className="text-gray-400 text-sm">Dra. Cynthia Kristell de Luna Hernández</p>
-                <p className="text-gray-500 text-xs">Doctora en Psicología</p>
-                <p className="text-gray-500 text-xs">Maestría en Psicoterapia Cognitivo Conductual</p>
-              </div>
-            </div>
-          </div>
+            </Title>
+            <Flex vertical gap="middle">
+              {team.map(({ area, name, details }) => (
+                <Flex vertical key={area}>
+                  <Text strong style={{ color: token.colorPrimary }}>
+                    {area}
+                  </Text>
+                  <Text style={muted}>{name}</Text>
+                  {details.map((detail) => (
+                    <Text key={detail} style={faint}>
+                      {detail}
+                    </Text>
+                  ))}
+                </Flex>
+              ))}
+            </Flex>
+          </Col>
 
-          {/* Contacto */}
-          <div>
-            <h4 className="text-[#dfc79c] font-semibold text-lg mb-4">
+          <Col xs={24} md={12} lg={6}>
+            <Title level={5} style={{ color: colors.gold, marginTop: 0 }}>
               Contacto
-            </h4>
-            <div className="space-y-3 text-gray-400">
-              <div className="flex items-start gap-2">
-                <EnvironmentOutlined className="text-[#55c5c4] mt-1" />
-                <span>Juárez 145, San Buenaventura, Coahuila, México</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <PhoneOutlined className="text-[#55c5c4]" />
-                <span>866 159 7283</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MailOutlined className="text-[#55c5c4]" />
-                <span>contacto@clinikb.com</span>
-              </div>
-            </div>
-          </div>
+            </Title>
+            <Flex vertical gap="small">
+              {contact.map(({ Icon, text }) => (
+                <Flex key={text} gap="small" align="start">
+                  <Icon style={{ color: token.colorPrimary, marginTop: 4 }} />
+                  <Text style={muted}>{text}</Text>
+                </Flex>
+              ))}
+            </Flex>
+          </Col>
 
-          {/* Redes sociales */}
-          <div>
-            <h4 className="text-[#dfc79c] font-semibold text-lg mb-4">
+          <Col xs={24} md={12} lg={6}>
+            <Title level={5} style={{ color: colors.gold, marginTop: 0 }}>
               Síguenos
-            </h4>
-            <div className="flex gap-4">
-              <a href="#" className="text-2xl text-gray-400 hover:text-[#55c5c4] transition-colors">
-                <FacebookOutlined />
-              </a>
-              <a href="#" className="text-2xl text-gray-400 hover:text-[#55c5c4] transition-colors">
-                <InstagramOutlined />
-              </a>
-              <a href="#" className="text-2xl text-gray-400 hover:text-[#55c5c4] transition-colors">
-                <WhatsAppOutlined />
-              </a>
-            </div>
-          </div>
-        </div>
+            </Title>
+            <Flex gap="middle">
+              {socials.map((Icon, index) => (
+                <AntLink
+                  key={index}
+                  href="#"
+                  style={{ fontSize: token.fontSizeHeading3, color: "rgba(255,255,255,0.65)" }}
+                >
+                  <Icon />
+                </AntLink>
+              ))}
+            </Flex>
+          </Col>
+        </Row>
 
-        <Divider className="border-gray-700 my-8" />
+        <Divider style={{ borderColor: "rgba(255,255,255,0.15)", margin: `${token.marginXL}px 0` }} />
 
-        <div className="text-center">
-          <p className="text-gray-500">
+        <Flex justify="center">
+          <Text style={faint}>
             © {new Date().getFullYear()} CliniKB. Todos los derechos reservados.
-          </p>
-        </div>
+          </Text>
+        </Flex>
       </div>
     </AntFooter>
   );
