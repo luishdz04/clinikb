@@ -1,119 +1,105 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { Card, Typography, Button, Row, Col } from "antd";
-import { UserOutlined, MedicineBoxOutlined } from "@ant-design/icons";
+import { useRouter } from "next/navigation";
+import { Form, Input, Button, Alert, Divider, Flex, Typography, App, theme } from "antd";
+import { UserOutlined, LockOutlined, ArrowLeftOutlined } from "@ant-design/icons";
+import AuthShell from "@/components/layout/AuthShell";
 
-const { Title, Text } = Typography;
+const { Text, Link: AntLink } = Typography;
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { message } = App.useApp();
+  const { token } = theme.useToken();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (values: { email: string; password: string }) => {
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/login-patient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result.error || "Error al iniciar sesión");
+        return;
+      }
+
+      message.success("¡Bienvenido de nuevo!");
+      router.push("/cliente/dashboard");
+    } catch {
+      setError("No se pudo conectar. Intenta de nuevo.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#55c5c4]/10 via-white to-[#dfc79c]/10 flex items-center justify-center py-12">
-      <div className="mx-auto max-w-4xl px-4 w-full">
-        <div className="text-center mb-8">
-          <Link href="/">
-            <Image
-              src="/images/logo/clinikb.png"
-              alt="CliniKB"
-              width={100}
-              height={100}
-              className="mx-auto mb-6"
+    <AuthShell title="Portal de Pacientes" subtitle="Ingresa a tu cuenta">
+      <Flex vertical gap={token.margin}>
+        {error && <Alert title={error} type="error" showIcon />}
+
+        <Form name="login-patient" onFinish={handleSubmit} layout="vertical" size="large">
+          <Form.Item
+            name="email"
+            label="Correo Electrónico"
+            rules={[
+              { required: true, message: "Ingresa tu correo" },
+              { type: "email", message: "Correo inválido" },
+            ]}
+          >
+            <Input prefix={<UserOutlined />} placeholder="tu@email.com" autoComplete="email" />
+          </Form.Item>
+
+          <Form.Item
+            name="password"
+            label="Contraseña"
+            rules={[{ required: true, message: "Ingresa tu contraseña" }]}
+          >
+            <Input.Password
+              prefix={<LockOutlined />}
+              placeholder="Tu contraseña"
+              autoComplete="current-password"
             />
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: 0 }}>
+            <Button type="primary" htmlType="submit" block loading={isLoading}>
+              Iniciar Sesión
+            </Button>
+          </Form.Item>
+        </Form>
+
+        <Flex vertical align="center" gap={token.marginXS}>
+          <Link href="/recuperar-password">
+            <AntLink>¿Olvidaste tu contraseña?</AntLink>
           </Link>
-          <Title level={2} className="!mb-2">
-            Iniciar Sesión
-          </Title>
-          <Text className="text-gray-600 text-lg">
-            Selecciona tu tipo de cuenta
-          </Text>
-        </div>
 
-        <Row gutter={[24, 24]}>
-          <Col xs={24} md={12}>
-            <Link href="/login/paciente">
-              <Card
-                hoverable
-                className="h-full shadow-lg border-2 border-transparent hover:border-[#55c5c4] transition-all"
-              >
-                <div className="text-center py-8">
-                  <div className="mb-6">
-                    <UserOutlined
-                      style={{
-                        fontSize: "64px",
-                        color: "#55c5c4",
-                      }}
-                    />
-                  </div>
-                  <Title level={3} className="!mb-3">
-                    Soy Paciente
-                  </Title>
-                  <Text className="text-gray-600 text-base">
-                    Accede a tu portal de paciente para gestionar tus citas y consultar
-                    tu historial médico.
-                  </Text>
-                  <div className="mt-6">
-                    <Button
-                      type="primary"
-                      size="large"
-                      icon={<UserOutlined />}
-                      className="w-full"
-                    >
-                      Iniciar Sesión como Paciente
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          </Col>
+          <Divider style={{ margin: `${token.marginXS}px 0` }} />
 
-          <Col xs={24} md={12}>
-            <Link href="/login/doctor">
-              <Card
-                hoverable
-                className="h-full shadow-lg border-2 border-transparent hover:border-[#367c84] transition-all"
-              >
-                <div className="text-center py-8">
-                  <div className="mb-6">
-                    <MedicineBoxOutlined
-                      style={{
-                        fontSize: "64px",
-                        color: "#367c84",
-                      }}
-                    />
-                  </div>
-                  <Title level={3} className="!mb-3">
-                    Soy Doctor/Admin
-                  </Title>
-                  <Text className="text-gray-600 text-base">
-                    Accede al panel de administración para gestionar pacientes y
-                    consultas.
-                  </Text>
-                  <div className="mt-6">
-                    <Button
-                      type="default"
-                      size="large"
-                      icon={<MedicineBoxOutlined />}
-                      className="w-full border-[#367c84] text-[#367c84] hover:bg-[#367c84] hover:text-white"
-                    >
-                      Iniciar Sesión como Doctor
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          </Col>
-        </Row>
-
-        <div className="mt-8 text-center">
-          <Text className="text-gray-600">
+          <Text type="secondary">
             ¿No tienes cuenta?{" "}
-            <Link href="/registro" className="text-[#55c5c4] font-semibold">
-              Regístrate como Paciente
+            <Link href="/registro">
+              <AntLink strong>Regístrate aquí</AntLink>
             </Link>
           </Text>
-        </div>
-      </div>
-    </div>
+
+          <Link href="/">
+            <Text type="secondary">
+              <ArrowLeftOutlined /> Volver al inicio
+            </Text>
+          </Link>
+        </Flex>
+      </Flex>
+    </AuthShell>
   );
 }

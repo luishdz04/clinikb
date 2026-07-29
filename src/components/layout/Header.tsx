@@ -1,21 +1,21 @@
 "use client";
 
-import { Layout, Menu, Button, Flex, Dropdown, Row, Col, theme } from "antd";
+import { Layout, Menu, Button, Flex, Drawer, Row, Col, Divider, Typography, theme } from "antd";
 import type { MenuProps } from "antd";
 import {
   HomeOutlined,
   UserOutlined,
   MedicineBoxOutlined,
   MenuOutlined,
-  LoginOutlined,
 } from "@ant-design/icons";
-import MaterialSymbol from "@/components/ui/MaterialSymbol";
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import MaterialSymbol from "@/components/ui/MaterialSymbol";
 
 const { Header: AntHeader } = Layout;
+const { Text } = Typography;
 
 /** Fuente única de las entradas de navegación: label, icono y ruta juntos. */
 const navItems = [
@@ -24,30 +24,19 @@ const navItems = [
   { key: "about", href: "/nosotros", label: "Nosotros", icon: <UserOutlined /> },
 ] as const;
 
-const menuItems: MenuProps["items"] = navItems.map(({ key, href, label, icon }) => ({
-  key,
-  icon,
-  label: <Link href={href}>{label}</Link>,
-}));
-
 /**
- * Marca el item activo con el símbolo `self_improvement` a la derecha del texto.
- *
- * Sustituye a la barra inferior por defecto del Menu horizontal, que se
- * desactiva con el token `activeBarHeight: 0` (ver themeConfig).
+ * Construye los items del Menu, marcando el activo con el símbolo
+ * `self_improvement`. Sustituye a la barra inferior por defecto del menú
+ * horizontal, desactivada con el token `activeBarHeight: 0` (ver themeConfig).
  */
-function withActiveMark(
-  items: MenuProps["items"],
-  activeKey: string | undefined
-): MenuProps["items"] {
-  if (!activeKey) return items;
+function buildMenuItems(activeKey?: string, showMark = true): MenuProps["items"] {
   return navItems.map(({ key, href, label, icon }) => ({
     key,
     icon,
     label: (
       <Link href={href}>
         {label}
-        {key === activeKey && (
+        {showMark && key === activeKey && (
           <MaterialSymbol
             name="self_improvement"
             size="1.15em"
@@ -59,26 +48,27 @@ function withActiveMark(
   }));
 }
 
-/**
- * En vista compacta no caben logo + dos botones + disparador, así que
- * "Iniciar Sesión" baja al desplegable junto a la navegación.
- */
-const compactExtraItems: MenuProps["items"] = [
-  { type: "divider" },
-  { key: "login", icon: <LoginOutlined />, label: <Link href="/login">Iniciar Sesión</Link> },
-];
-
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const { token } = theme.useToken();
 
+  // Guardamos la ruta en la que se abrió el drawer en vez de un booleano: así
+  // cualquier navegación (incluido el botón atrás) lo cierra al derivarse en
+  // render, sin necesidad de un efecto que sincronice estado.
+  const [openedAtPath, setOpenedAtPath] = useState<string | null>(null);
+  const drawerOpen = openedAtPath === pathname;
+
+  const openDrawer = useCallback(() => setOpenedAtPath(pathname), [pathname]);
+  const closeDrawer = useCallback(() => setOpenedAtPath(null), []);
+
   const handleClick = useCallback<NonNullable<MenuProps["onClick"]>>(
     ({ key }) => {
       const target = navItems.find((item) => item.key === key);
       if (target) router.push(target.href);
+      closeDrawer();
     },
-    [router]
+    [router, closeDrawer]
   );
 
   // El item activo se deriva de la ruta: sin estado local que se desincronice.
@@ -128,7 +118,7 @@ export default function Header() {
           <Menu
             mode="horizontal"
             selectedKeys={selectedKeys}
-            items={withActiveMark(menuItems, selectedKeys[0])}
+            items={buildMenuItems(selectedKeys[0])}
             onClick={handleClick}
             style={{ flex: 1, minWidth: 0, justifyContent: "center", borderBottom: "none" }}
           />
@@ -152,19 +142,69 @@ export default function Header() {
             <Link href="/registro">
               <Button type="primary">Agendar Cita</Button>
             </Link>
-            <Dropdown
-              menu={{
-                items: [...(menuItems ?? []), ...(compactExtraItems ?? [])],
-                selectedKeys,
-                onClick: handleClick,
-              }}
-              trigger={["click"]}
-            >
-              <Button type="text" aria-label="Abrir menú" icon={<MenuOutlined />} />
-            </Dropdown>
+            <Button
+              type="text"
+              aria-label="Abrir menú"
+              icon={<MenuOutlined />}
+              onClick={openDrawer}
+            />
           </Flex>
         </Col>
       </Row>
+
+      <Drawer
+        open={drawerOpen}
+        onClose={closeDrawer}
+        placement="right"
+        // `size` sustituye a `width`/`height`, deprecados en v6. Acepta string
+        // desde 6.2.0, así se adapta a pantallas angostas (por defecto 378px).
+        size="min(320px, 82vw)"
+        title={
+          <Flex align="center" gap="small">
+            <Image
+              src="/images/logo/clinikb.png"
+              alt=""
+              width={32}
+              height={32}
+              style={{ borderRadius: "50%" }}
+            />
+            <Text strong>CliniKB</Text>
+          </Flex>
+        }
+        // El Menu trae su propio padding; el del body lo dejaría descuadrado.
+        styles={{ body: { padding: 0 } }}
+        footer={
+          <Flex vertical gap="small">
+            <Link href="/registro" onClick={closeDrawer}>
+              <Button type="primary" size="large" block>
+                Agendar Cita
+              </Button>
+            </Link>
+            <Link href="/login" onClick={closeDrawer}>
+              <Button size="large" block>
+                Iniciar Sesión
+              </Button>
+            </Link>
+          </Flex>
+        }
+      >
+        <Menu
+          mode="inline"
+          selectedKeys={selectedKeys}
+          items={buildMenuItems(selectedKeys[0], false)}
+          onClick={handleClick}
+          style={{ borderInlineEnd: "none" }}
+        />
+        <Divider style={{ marginBlock: token.marginXS }} />
+        <Flex vertical gap={4} style={{ padding: `0 ${token.padding}px` }}>
+          <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            866 159 7283
+          </Text>
+          <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            Juárez 145, San Buenaventura, Coahuila
+          </Text>
+        </Flex>
+      </Drawer>
     </AntHeader>
   );
 }

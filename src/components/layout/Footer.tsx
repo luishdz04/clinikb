@@ -10,6 +10,7 @@ import {
   WhatsAppOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
+import Link from "next/link";
 import { colors } from "@/theme/themeConfig";
 
 const { Footer: AntFooter } = Layout;
@@ -121,10 +122,16 @@ export default function Footer() {
 
         <Divider style={{ borderColor: "rgba(255,255,255,0.15)", margin: `${token.marginXL}px 0` }} />
 
-        <Flex justify="center">
+        <Flex justify="center" align="center" gap="small" wrap>
           <Text style={faint}>
             © {new Date().getFullYear()} CliniKB. Todos los derechos reservados.
           </Text>
+          <Text style={faint}>·</Text>
+          <Link href="/acceso-medico">
+            <Text style={faint} underline>
+              Acceso médico
+            </Text>
+          </Link>
         </Flex>
       </div>
     </AntFooter>

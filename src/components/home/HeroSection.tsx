@@ -57,11 +57,11 @@ export default function HeroSection() {
               }}
             >
               <Image
-                src="/images/team/psic.png"
-                alt="Psic. Cynthia Kristell de Luna Hernández"
+                src="/images/cynthia/perfil.jpg"
+                alt="Dra. Cynthia Kristell de Luna Hernández"
                 fill
                 sizes="(max-width: 992px) 100vw, 384px"
-                style={{ objectFit: "cover" }}
+                style={{ objectFit: "cover", objectPosition: "center top" }}
                 priority
               />
             </div>

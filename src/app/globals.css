@@ -62,16 +62,6 @@ body {
   color: var(--brand-dark);
 }
 
-.ant-alert-warning a {
-  color: var(--brand-gold-dark);
-  font-weight: 600;
-  text-decoration: underline;
-}
-
-.ant-alert-warning a:hover {
-  color: var(--brand-brown);
-}
-
 .ant-card-hoverable:hover {
   border-color: var(--brand);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--brand) 15%, transparent);
