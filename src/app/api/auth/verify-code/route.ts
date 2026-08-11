@@ -50,12 +50,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // El correo quedó confirmado. El paciente sigue en 'pending' esperando la
-    // aprobación del administrador: son dos puertas distintas.
+    // Verificar el correo COMPLETA el registro: ya no hay aprobación manual
+    // del médico. Se marca 'approved' para que el paciente pueda entrar de
+    // inmediato — el login y el layout de cliente exigen ese estado.
+    // `approved_by` queda nulo justamente para distinguir las altas
+    // automáticas de las que en su momento aprobó una persona.
     const { data: patient } = await adminSupabase
       .from('patients')
-      .select('id, full_name, email, status')
+      .update({ status: 'approved', approved_at: new Date().toISOString() })
       .eq('user_id', data.user.id)
+      .select('id, full_name, email, status')
       .maybeSingle();
 
     if (patient) {
@@ -66,7 +70,7 @@ export async function POST(request: Request) {
         if (adminEmail) {
           await sendEmail({
             to: adminEmail,
-            subject: `CliniKB - Nuevo Registro Pendiente: ${patient.full_name}`,
+            subject: `CliniKB - Nuevo paciente registrado: ${patient.full_name}`,
             html: getNewRegistrationEmailHTML(
               patient.full_name,
               patient.email,
@@ -85,7 +89,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Correo verificado. Tu solicitud quedó pendiente de aprobación.',
+      message: 'Correo verificado. Tu cuenta ya está activa.',
     });
   } catch (error) {
     console.error('[verify-code] Error inesperado:', error);

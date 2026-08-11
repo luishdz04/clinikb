@@ -40,9 +40,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // Ya no hay aprobación manual: un paciente en 'pending' es alguien que se
+    // registró pero nunca escribió el código que le llegó por correo.
     if (patient.status === 'pending') {
       return NextResponse.json(
-        { error: 'Tu cuenta está pendiente de aprobación' },
+        {
+          error:
+            'Todavía no confirmas tu correo. Regístrate de nuevo con este mismo correo para recibir un código.',
+        },
         { status: 403 }
       );
     }

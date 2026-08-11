@@ -1,4 +1,5 @@
-// Template HTML para email de registro pendiente (para admin)
+// Aviso interno al admin: un paciente completó su registro.
+// Ya no hay aprobación manual — la verificación del correo activa la cuenta.
 export function getNewRegistrationEmailHTML(patientName: string, patientEmail: string, dashboardUrl: string) {
   return `
     <!DOCTYPE html>
@@ -6,7 +7,7 @@ export function getNewRegistrationEmailHTML(patientName: string, patientEmail: s
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Nuevo Registro Pendiente - CliniKB</title>
+        <title>Nuevo Paciente Registrado - CliniKB</title>
       </head>
       <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
         <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px;">
@@ -18,7 +19,7 @@ export function getNewRegistrationEmailHTML(patientName: string, patientEmail: s
                 <tr>
                   <td style="background-color: #367c84; padding: 40px 30px; text-align: center;">
                     <img src="https://clinikb.com.mx/images/logo/clinikb.png" alt="CliniKB" style="width: 100px; height: 100px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;" />
-                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Nuevo Registro Pendiente</h1>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Nuevo Paciente Registrado</h1>
                   </td>
                 </tr>
                 
@@ -30,7 +31,7 @@ export function getNewRegistrationEmailHTML(patientName: string, patientEmail: s
                     </p>
                     
                     <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-                      Se ha registrado un nuevo paciente en <strong>CliniKB</strong> y está pendiente de aprobación.
+                      Un nuevo paciente completó su registro en <strong>CliniKB</strong> y ya verificó su correo. Su cuenta está activa.
                     </p>
                     
                     <!-- Datos del Paciente -->
@@ -47,7 +48,7 @@ export function getNewRegistrationEmailHTML(patientName: string, patientEmail: s
                     </table>
                     
                     <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px 0;">
-                      Por favor, revisa la solicitud en el panel de administración para aprobarla o rechazarla.
+                      Puedes consultar su ficha en el panel de administración.
                     </p>
                     
                     <!-- Button -->
