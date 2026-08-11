@@ -22,7 +22,29 @@ export async function GET() {
 
     if (error) throw error;
 
-    return NextResponse.json({ services: data || [] });
+    // Cuántos doctores ofrecen cada servicio. Va en consulta aparte porque
+    // sólo cuentan las asignaciones activas: `doctor_services` conserva las
+    // filas desactivadas, así que un count anidado saldría inflado.
+    // Un servicio con cero doctores no se puede agendar, y eso hay que verlo
+    // en el catálogo.
+    const { data: asignaciones, error: errorAsignaciones } = await adminSupabase
+      .from('doctor_services')
+      .select('service_id')
+      .eq('active', true);
+
+    if (errorAsignaciones) throw errorAsignaciones;
+
+    const conteo = new Map<string, number>();
+    for (const fila of asignaciones ?? []) {
+      conteo.set(fila.service_id, (conteo.get(fila.service_id) ?? 0) + 1);
+    }
+
+    const services = (data ?? []).map((s) => ({
+      ...s,
+      doctor_count: conteo.get(s.id) ?? 0,
+    }));
+
+    return NextResponse.json({ services });
   } catch (error: any) {
     console.error('Error fetching services:', error);
     return NextResponse.json(

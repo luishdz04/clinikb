@@ -9,6 +9,11 @@ export interface Service {
   available_modalities?: string[];
   created_at: string;
   updated_at: string;
+  /**
+   * Doctores que ofrecen el servicio (asignaciones activas). Sólo lo devuelve
+   * `GET /api/services`. En cero, el servicio no se puede agendar.
+   */
+  doctor_count?: number;
 }
 
 export interface DoctorService {
