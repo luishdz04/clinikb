@@ -1,646 +1,944 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Typography,
-  Card,
-  Calendar,
+  Alert,
+  App,
   Badge,
-  Modal,
-  Form,
-  TimePicker,
-  Select,
-  InputNumber,
-  Input,
+  Checkbox,
   Button,
+  Calendar,
+  Card,
+  Col,
+  DatePicker,
+  Empty,
+  Flex,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Select,
   Space,
+  Statistic,
+  Switch,
   Table,
   Tag,
-  App,
-  Spin,
+  TimePicker,
+  Tooltip,
+  Typography,
+  theme,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
-  PlusOutlined,
-  EditOutlined,
   DeleteOutlined,
-  ClockCircleOutlined,
+  EditOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
-import type { Dayjs } from "dayjs";
-import dayjs from "dayjs";
-import timezone from "dayjs/plugin/timezone";
-import utc from "dayjs/plugin/utc";
+import dayjs, { type Dayjs } from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/es";
+import Link from "next/link";
+import type { AvailabilitySlot, Service } from "@/types/appointments";
 
-// Configurar dayjs para zona horaria de Monterrey
-dayjs.extend(utc);
-dayjs.extend(timezone);
+// customParseFormat faltaba: sin él, dayjs("09:00:00", "HH:mm:ss") da Invalid
+// Date y el formulario de edición aparecía con las horas vacías.
+dayjs.extend(customParseFormat);
 dayjs.locale("es");
-const MONTERREY_TZ = "America/Monterrey";
 
-const { Title } = Typography;
+const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
-interface Service {
+const FORMATO_FECHA = "YYYY-MM-DD";
+const FORMATO_HORA = "HH:mm:ss";
+
+/**
+ * `slot_date`, `start_time` y `end_time` son columnas date/time SIN zona: son
+ * horas de reloj de pared que ya significan hora de Monterrey. Convertirlas
+ * de zona las desplaza — es lo que hacía que 09:00 se mostrara como 03:00 y
+ * que la fecha se corriera un día en navegadores fuera de México.
+ *
+ * Sólo `created_at` y compañía son timestamptz y sí se convierten al mostrar.
+ */
+const leerFecha = (valor: string) => dayjs(valor, FORMATO_FECHA);
+const leerHora = (valor: string) => dayjs(valor, FORMATO_HORA);
+
+const MODALIDADES: Record<string, { texto: string; color: string }> = {
+  online: { texto: "En línea", color: "blue" },
+  presencial: { texto: "Presencial", color: "green" },
+};
+
+interface DoctorSesion {
   id: string;
-  key: string;
-  title: string;
-  category: string;
-  duration_minutes: number;
+  full_name?: string;
 }
 
-interface AvailabilitySlot {
-  id: string;
-  doctor_id: string;
-  service_id: string;
-  slot_date: string;
-  start_time: string;
-  end_time: string;
-  is_available: boolean;
-  max_appointments: number;
-  modality?: string;
-  notes?: string;
-  service?: Service;
+interface DatosHorarios {
+  doctor: DoctorSesion;
+  servicios: Service[];
+  slots: AvailabilitySlot[];
 }
 
-interface DoctorInfo {
-  id: string;
-  full_name: string;
-  email: string;
+class SinSesionError extends Error {}
+
+function leerDoctor(): DoctorSesion | null {
+  try {
+    const bruto = localStorage.getItem("doctor");
+    if (!bruto) return null;
+    const d = JSON.parse(bruto);
+    return d?.id ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Servicios del doctor y sus horarios del mes, en una sola lectura.
+ * Sin estado dentro, para poder llamarla desde un efecto sin renders en cascada.
+ */
+async function obtenerDatos(mes: Dayjs): Promise<DatosHorarios> {
+  const doctor = leerDoctor();
+  if (!doctor) throw new SinSesionError();
+
+  const desde = mes.startOf("month").format(FORMATO_FECHA);
+  const hasta = mes.endOf("month").format(FORMATO_FECHA);
+
+  const [resServicios, resSlots] = await Promise.all([
+    fetch(`/api/admin/doctor-services?doctor_id=${doctor.id}`),
+    fetch(
+      `/api/admin/availability-slots?doctorId=${doctor.id}&startDate=${desde}&endDate=${hasta}`,
+    ),
+  ]);
+
+  const jsonServicios = await resServicios.json();
+  const jsonSlots = await resSlots.json();
+
+  if (!resServicios.ok) throw new Error(jsonServicios.error || "Error al cargar tus servicios");
+  if (!resSlots.ok) throw new Error(jsonSlots.error || "Error al cargar los horarios");
+
+  // El endpoint devuelve la relación; aquí interesa el servicio en sí.
+  const servicios = (jsonServicios.doctorServices ?? [])
+    .map((ds: { service?: Service }) => ds.service)
+    .filter((s: Service | undefined): s is Service => Boolean(s?.active));
+
+  return {
+    doctor,
+    servicios,
+    slots: jsonSlots.slots ?? jsonSlots ?? [],
+  };
 }
 
 export default function HorariosPage() {
   const { message, modal } = App.useApp();
-  const [doctor, setDoctor] = useState<DoctorInfo | null>(null);
-  const [services, setServices] = useState<Service[]>([]);
-  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs().tz(MONTERREY_TZ));
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSlot, setEditingSlot] = useState<AvailabilitySlot | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { token } = theme.useToken();
   const [form] = Form.useForm();
 
-  // Cargar información del doctor
+  const [doctor, setDoctor] = useState<DoctorSesion | null>(null);
+  const [servicios, setServicios] = useState<Service[]>([]);
+  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [sinSesion, setSinSesion] = useState(false);
+
+  const [mes, setMes] = useState<Dayjs>(() => dayjs());
+  const [diaElegido, setDiaElegido] = useState<Dayjs>(() => dayjs());
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [editando, setEditando] = useState<AvailabilitySlot | null>(null);
+
+  const [formLote] = Form.useForm();
+  const [modalLote, setModalLote] = useState(false);
+  const [generando, setGenerando] = useState(false);
+
+  // El servicio elegido en el formulario limita las modalidades disponibles.
+  const servicioElegido = Form.useWatch("serviceId", form);
+  const servicioLote = Form.useWatch("serviceId", formLote);
+  const loteRango = Form.useWatch("rango", formLote);
+  const loteDias = Form.useWatch("weekdays", formLote);
+  const loteFranja = Form.useWatch("franja", formLote);
+  const loteBloque = Form.useWatch("blockMinutes", formLote);
+
+  const aplicar = useCallback(
+    (promesa: Promise<DatosHorarios>, vivo: () => boolean) =>
+      promesa
+        .then(({ doctor: d, servicios: s, slots: sl }) => {
+          if (!vivo()) return;
+          setDoctor(d);
+          setServicios(s);
+          setSlots(sl);
+          setSinSesion(false);
+        })
+        .catch((error: unknown) => {
+          if (!vivo()) return;
+          if (error instanceof SinSesionError) {
+            setSinSesion(true);
+            return;
+          }
+          console.error("Error cargando horarios:", error);
+          message.error(error instanceof Error ? error.message : "Error al cargar los horarios");
+        })
+        .finally(() => {
+          if (vivo()) setLoading(false);
+        }),
+    [message],
+  );
+
   useEffect(() => {
-    const doctorStr = localStorage.getItem("doctor");
-    if (doctorStr) {
-      const doctorData = JSON.parse(doctorStr);
-      setDoctor(doctorData);
-    }
-  }, []);
+    let vivo = true;
+    aplicar(obtenerDatos(mes), () => vivo);
+    return () => {
+      vivo = false;
+    };
+  }, [aplicar, mes]);
 
-  // Cargar servicios del doctor
-  useEffect(() => {
-    if (doctor?.id) {
-      fetchDoctorServices();
-    }
-  }, [doctor]);
-
-  // Cargar slots del mes actual
-  useEffect(() => {
-    if (doctor?.id && selectedDate) {
-      fetchSlots();
-    }
-  }, [doctor, selectedDate]);
-
-  const fetchDoctorServices = async () => {
-    try {
-      const response = await fetch(
-        `/api/admin/doctor-services?doctor_id=${doctor?.id}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        // Extraer solo los servicios del array doctorServices
-        const servicesList = data.doctorServices?.map((ds: any) => ds.service) || [];
-        setServices(servicesList);
-      }
-    } catch (error) {
-      console.error("Error fetching services:", error);
-      message.error("Error al cargar los servicios");
-    }
-  };
-
-  const fetchSlots = async () => {
-    if (!doctor?.id) return;
-
+  const refrescar = () => {
     setLoading(true);
+    aplicar(obtenerDatos(mes), () => true);
+  };
+
+  /** Horarios agrupados por fecha, para pintar el calendario sin recorrer todo. */
+  const porFecha = useMemo(() => {
+    const mapa = new Map<string, AvailabilitySlot[]>();
+    for (const slot of slots) {
+      const clave = slot.slot_date;
+      mapa.set(clave, [...(mapa.get(clave) ?? []), slot]);
+    }
+    return mapa;
+  }, [slots]);
+
+  const slotsDelDia = porFecha.get(diaElegido.format(FORMATO_FECHA)) ?? [];
+
+  const modalidadesPermitidas = useMemo(() => {
+    const servicio = servicios.find((s) => s.id === servicioElegido);
+    // Sin servicio elegido se ofrecen ambas; el CHECK de la base es el límite real.
+    const claves = servicio?.available_modalities?.length
+      ? servicio.available_modalities
+      : Object.keys(MODALIDADES);
+    return claves.map((k) => ({ value: k, label: MODALIDADES[k]?.texto ?? k }));
+  }, [servicios, servicioElegido]);
+
+  /** Mismo criterio que arriba, para el formulario de generación masiva. */
+  const modalidadesLote = useMemo(() => {
+    const servicio = servicios.find((s) => s.id === servicioLote);
+    const claves = servicio?.available_modalities?.length
+      ? servicio.available_modalities
+      : Object.keys(MODALIDADES);
+    return claves.map((k) => ({ value: k, label: MODALIDADES[k]?.texto ?? k }));
+  }, [servicios, servicioLote]);
+
+  /**
+   * Cuántos bloques saldrían con lo capturado. Se calcula igual que en el
+   * servidor para que el número que se ve antes de generar sea el real.
+   */
+  const previaLote = useMemo(() => {
+    if (!loteRango?.[0] || !loteRango?.[1] || !loteFranja?.[0] || !loteFranja?.[1]) return null;
+    if (!loteDias?.length || !loteBloque) return null;
+
+    const minutos = (d: Dayjs) => d.hour() * 60 + d.minute();
+    const inicioFranja = minutos(loteFranja[0]);
+    const finFranja = minutos(loteFranja[1]);
+    if (finFranja - inicioFranja < loteBloque) return { dias: 0, porDia: 0, total: 0 };
+
+    const porDia = Math.floor((finFranja - inicioFranja) / loteBloque);
+
+    let dias = 0;
+    for (let d = loteRango[0].startOf("day"); !d.isAfter(loteRango[1], "day"); d = d.add(1, "day")) {
+      if (loteDias.includes(d.day())) dias++;
+    }
+    return { dias, porDia, total: dias * porDia };
+  }, [loteRango, loteDias, loteFranja, loteBloque]);
+
+  const abrirLote = () => {
+    formLote.resetFields();
+    const servicioPorDefecto = servicios[0];
+    formLote.setFieldsValue({
+      serviceId: servicioPorDefecto?.id,
+      rango: [diaElegido, diaElegido.add(2, "week")],
+      weekdays: [1, 2, 3, 4, 5],
+      franja: [dayjs("09:00", "HH:mm"), dayjs("14:00", "HH:mm")],
+      blockMinutes: servicioPorDefecto?.duration_minutes ?? 60,
+      maxAppointments: 1,
+      modality: "online",
+    });
+    setModalLote(true);
+  };
+
+  const generarLote = async () => {
+    let values;
     try {
-      const startDate = selectedDate.startOf("month").format("YYYY-MM-DD");
-      const endDate = selectedDate.endOf("month").format("YYYY-MM-DD");
+      values = await formLote.validateFields();
+    } catch {
+      return;
+    }
+    if (!doctor) return;
 
-      const response = await fetch(
-        `/api/admin/availability-slots?doctorId=${doctor.id}&startDate=${startDate}&endDate=${endDate}`
-      );
+    try {
+      setGenerando(true);
+      const res = await fetch("/api/admin/availability-slots/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doctorId: doctor.id,
+          serviceId: values.serviceId,
+          startDate: values.rango[0].format(FORMATO_FECHA),
+          endDate: values.rango[1].format(FORMATO_FECHA),
+          weekdays: values.weekdays,
+          dayStart: values.franja[0].format(FORMATO_HORA),
+          dayEnd: values.franja[1].format(FORMATO_HORA),
+          blockMinutes: values.blockMinutes,
+          maxAppointments: values.maxAppointments,
+          modality: values.modality,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al generar los horarios");
 
-      if (response.ok) {
-        const data = await response.json();
-        setSlots(data);
-      } else {
-        message.error("Error al cargar los horarios");
-      }
+      if (json.creados === 0) message.warning(json.message);
+      else message.success(json.message);
+
+      setModalLote(false);
+      refrescar();
     } catch (error) {
-      console.error("Error fetching slots:", error);
-      message.error("Error al cargar los horarios");
+      message.error(error instanceof Error ? error.message : "Error al generar los horarios");
     } finally {
-      setLoading(false);
+      setGenerando(false);
     }
   };
 
-  const handleDateSelect = (date: Dayjs) => {
-    setSelectedDate(date);
-  };
-
-  const handleOpenModal = (date?: Dayjs, slot?: AvailabilitySlot) => {
-    if (slot) {
-      // Editar slot existente
-      setEditingSlot(slot);
-      form.setFieldsValue({
-        serviceId: slot.service_id,
-        slotDate: dayjs(slot.slot_date).tz(MONTERREY_TZ),
-        timeRange: [
-          dayjs(slot.start_time, "HH:mm:ss").tz(MONTERREY_TZ),
-          dayjs(slot.end_time, "HH:mm:ss").tz(MONTERREY_TZ),
-        ],
-        maxAppointments: slot.max_appointments,
-        modality: slot.modality || 'online',
-        notes: slot.notes,
-      });
-    } else {
-      // Nuevo slot
-      setEditingSlot(null);
-      form.setFieldsValue({
-        slotDate: date || selectedDate,
-        maxAppointments: 1,
-        modality: 'online',
-      });
-    }
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingSlot(null);
+  const abrirNuevo = (fecha?: Dayjs) => {
+    setEditando(null);
     form.resetFields();
+    form.setFieldsValue({
+      slotDate: fecha ?? diaElegido,
+      maxAppointments: 1,
+      modality: "online",
+      isAvailable: true,
+    });
+    setModalAbierto(true);
   };
 
-  const handleSubmit = async () => {
+  const abrirEdicion = (slot: AvailabilitySlot) => {
+    setEditando(slot);
+    form.setFieldsValue({
+      serviceId: slot.service_id,
+      slotDate: leerFecha(slot.slot_date),
+      timeRange: [leerHora(slot.start_time), leerHora(slot.end_time)],
+      maxAppointments: slot.max_appointments,
+      modality: slot.modality ?? "online",
+      isAvailable: slot.is_available,
+      notes: slot.notes ?? undefined,
+    });
+    setModalAbierto(true);
+  };
+
+  const guardar = async () => {
+    let values;
     try {
-      const values = await form.validateFields();
-      const slotDate = values.slotDate.tz(MONTERREY_TZ).format("YYYY-MM-DD");
-      const startTime = values.timeRange[0].tz(MONTERREY_TZ).format("HH:mm:ss");
-      const endTime = values.timeRange[1].tz(MONTERREY_TZ).format("HH:mm:ss");
+      values = await form.validateFields();
+    } catch {
+      return;
+    }
+    if (!doctor) return;
 
-      const payload = {
-        doctorId: doctor?.id,
-        serviceId: values.serviceId,
-        slotDate,
-        startTime,
-        endTime,
-        maxAppointments: values.maxAppointments,
-        modality: values.modality,
-        notes: values.notes,
-      };
+    // Nada de .tz() aquí: se manda el reloj de pared tal cual se capturó.
+    const cuerpo = {
+      doctorId: doctor.id,
+      serviceId: values.serviceId,
+      slotDate: values.slotDate.format(FORMATO_FECHA),
+      startTime: values.timeRange[0].format(FORMATO_HORA),
+      endTime: values.timeRange[1].format(FORMATO_HORA),
+      maxAppointments: values.maxAppointments,
+      modality: values.modality,
+      notes: values.notes || null,
+      isAvailable: values.isAvailable,
+    };
 
-      let response;
-      if (editingSlot) {
-        // Actualizar
-        response = await fetch("/api/admin/availability-slots", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editingSlot.id, ...payload }),
-        });
-      } else {
-        // Crear
-        response = await fetch("/api/admin/availability-slots", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
-
-      if (response.ok) {
-        message.success(
-          editingSlot
-            ? "Horario actualizado exitosamente"
-            : "Horario creado exitosamente"
-        );
-        handleCloseModal();
-        fetchSlots();
-      } else {
-        const error = await response.json();
-        message.error(error.error || "Error al guardar el horario");
-      }
+    try {
+      setGuardando(true);
+      const res = await fetch("/api/admin/availability-slots", {
+        method: editando ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editando ? { ...cuerpo, id: editando.id } : cuerpo),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al guardar el horario");
+      message.success(editando ? "Horario actualizado" : "Horario creado");
+      setModalAbierto(false);
+      refrescar();
     } catch (error) {
-      console.error("Error submitting form:", error);
-      message.error("Error al procesar el formulario");
+      message.error(error instanceof Error ? error.message : "Error al guardar el horario");
+    } finally {
+      setGuardando(false);
     }
   };
 
-  const handleDelete = (slot: AvailabilitySlot) => {
+  const eliminar = (slot: AvailabilitySlot) => {
     modal.confirm({
-      title: "¿Eliminar horario?",
-      content: `¿Estás seguro de eliminar el horario de ${slot.service?.title} el ${dayjs(
-        slot.slot_date
-      ).format("DD/MM/YYYY")} de ${slot.start_time.substring(0, 5)} a ${slot.end_time.substring(0, 5)}?`,
+      title: "Eliminar horario",
+      content: `${leerFecha(slot.slot_date).format("DD/MM/YYYY")} de ${leerHora(
+        slot.start_time,
+      ).format("HH:mm")} a ${leerHora(slot.end_time).format("HH:mm")}. Si ya tiene citas, no se podrá eliminar.`,
       okText: "Eliminar",
-      okType: "danger",
+      okButtonProps: { danger: true },
       cancelText: "Cancelar",
       onOk: async () => {
         try {
-          const response = await fetch(
-            `/api/admin/availability-slots?id=${slot.id}`,
-            {
-              method: "DELETE",
-            }
-          );
-
-          if (response.ok) {
-            message.success("Horario eliminado exitosamente");
-            fetchSlots();
-          } else {
-            const error = await response.json();
-            message.error(error.error || "Error al eliminar el horario");
-          }
+          const res = await fetch(`/api/admin/availability-slots?id=${slot.id}`, {
+            method: "DELETE",
+          });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || "Error al eliminar");
+          message.success("Horario eliminado");
+          refrescar();
         } catch (error) {
-          console.error("Error deleting slot:", error);
-          message.error("Error al eliminar el horario");
+          message.error(error instanceof Error ? error.message : "Error al eliminar el horario");
         }
       },
     });
   };
 
-  const handleToggleAvailability = async (slot: AvailabilitySlot) => {
+  const alternarDisponible = async (slot: AvailabilitySlot) => {
     try {
-      const response = await fetch("/api/admin/availability-slots", {
+      const res = await fetch("/api/admin/availability-slots", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: slot.id,
-          isAvailable: !slot.is_available,
-        }),
+        body: JSON.stringify({ id: slot.id, isAvailable: !slot.is_available }),
       });
-
-      if (response.ok) {
-        message.success(
-          slot.is_available
-            ? "Horario marcado como no disponible"
-            : "Horario marcado como disponible"
-        );
-        fetchSlots();
-      } else {
-        const error = await response.json();
-        message.error(error.error || "Error al actualizar disponibilidad");
-      }
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al cambiar la disponibilidad");
+      refrescar();
     } catch (error) {
-      console.error("Error toggling availability:", error);
-      message.error("Error al actualizar disponibilidad");
+      message.error(error instanceof Error ? error.message : "Error al cambiar la disponibilidad");
     }
   };
 
-  // Obtener slots para una fecha específica
-  const getSlotsByDate = (date: Dayjs) => {
-    const dateStr = date.format("YYYY-MM-DD");
-    return slots.filter((slot) => slot.slot_date === dateStr);
-  };
-
-  // Obtener slots del día seleccionado
-  const selectedDaySlots = getSlotsByDate(selectedDate);
-
-  // Renderizar contenido de celda del calendario
-  const dateCellRender = (date: Dayjs) => {
-    const daySlots = getSlotsByDate(date);
-    if (daySlots.length === 0) return null;
-
-    return (
-      <ul className="space-y-1">
-        {daySlots.slice(0, 2).map((slot) => (
-          <li key={slot.id}>
-            <Badge
-              status={slot.is_available ? "success" : "default"}
-              text={
-                <span className="text-xs">
-                  {slot.start_time.substring(0, 5)} - {slot.service?.title?.substring(0, 15)}
-                </span>
-              }
-            />
-          </li>
-        ))}
-        {daySlots.length > 2 && (
-          <li className="text-xs text-gray-500">+{daySlots.length - 2} más</li>
-        )}
-      </ul>
-    );
-  };
-
-  const columns = [
+  const columnas: ColumnsType<AvailabilitySlot> = [
     {
-      title: "Servicio",
-      dataIndex: ["service", "title"],
-      key: "service",
-      render: (text: string, record: AvailabilitySlot) => (
-        <Space orientation="vertical" size={0}>
-          <span className="font-medium">{text}</span>
-          <Tag color={record.service?.category === "Psicológica" ? "blue" : "green"}>
-            {record.service?.category}
-          </Tag>
-        </Space>
-      ),
+      title: "Fecha",
+      dataIndex: "slot_date",
+      key: "slot_date",
+      sorter: (a, b) => a.slot_date.localeCompare(b.slot_date),
+      defaultSortOrder: "ascend",
+      render: (f: string) => leerFecha(f).format("ddd DD/MM/YYYY"),
     },
     {
       title: "Horario",
-      key: "time",
-      render: (_: any, record: AvailabilitySlot) => (
-        <Space>
-          <ClockCircleOutlined />
-          <span>
-            {record.start_time.substring(0, 5)} - {record.end_time.substring(0, 5)}
-          </span>
-        </Space>
-      ),
+      key: "horario",
+      render: (_, r) =>
+        `${leerHora(r.start_time).format("HH:mm")} - ${leerHora(r.end_time).format("HH:mm")}`,
     },
     {
-      title: "Capacidad",
-      dataIndex: "max_appointments",
-      key: "capacity",
-      render: (max: number) => `${max} cita${max !== 1 ? "s" : ""}`,
+      title: "Servicio",
+      key: "servicio",
+      responsive: ["md"],
+      render: (_, r) => r.service?.title ?? "—",
     },
     {
       title: "Modalidad",
       dataIndex: "modality",
       key: "modality",
-      render: (modality: string) => (
-        <Tag color={modality === 'online' ? 'blue' : 'green'}>
-          {modality === 'online' ? '💻 Online' : '🏥 Presencial'}
-        </Tag>
-      ),
+      responsive: ["lg"],
+      render: (m?: string | null) => {
+        const e = m ? MODALIDADES[m] : undefined;
+        return e ? <Tag color={e.color}>{e.texto}</Tag> : <Tag>Sin definir</Tag>;
+      },
     },
     {
-      title: "Estado",
+      title: "Cupo",
+      dataIndex: "max_appointments",
+      key: "max_appointments",
+      align: "center",
+      responsive: ["lg"],
+    },
+    {
+      title: "Disponible",
       dataIndex: "is_available",
-      key: "status",
-      render: (available: boolean) => (
-        <Tag color={available ? "success" : "default"}>
-          {available ? "Disponible" : "No disponible"}
-        </Tag>
+      key: "is_available",
+      align: "center",
+      render: (v: boolean, r) => (
+        <Switch
+          size="small"
+          checked={v}
+          onChange={() => alternarDisponible(r)}
+          aria-label="Alternar disponibilidad"
+        />
       ),
-    },
-    {
-      title: "Notas",
-      dataIndex: "notes",
-      key: "notes",
-      ellipsis: true,
-      render: (notes: string) => notes || "-",
     },
     {
       title: "Acciones",
-      key: "actions",
-      render: (_: any, record: AvailabilitySlot) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleOpenModal(undefined, record)}
-          >
-            Editar
-          </Button>
-          <Button
-            type="link"
-            onClick={() => handleToggleAvailability(record)}
-          >
-            {record.is_available ? "Desactivar" : "Activar"}
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-          >
-            Eliminar
-          </Button>
+      key: "acciones",
+      fixed: "right",
+      render: (_, r) => (
+        <Space size="small">
+          <Tooltip title="Editar">
+            <Button size="small" icon={<EditOutlined />} onClick={() => abrirEdicion(r)} />
+          </Tooltip>
+          <Tooltip title="Eliminar">
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => eliminar(r)} />
+          </Tooltip>
         </Space>
       ),
     },
   ];
 
-  if (!doctor) {
+  if (sinSesion) {
     return (
-      <div className="flex justify-center items-center h-96">
-        <Spin size="large" />
-      </div>
+      <Alert
+        type="error"
+        showIcon
+        title="No se encontró tu sesión"
+        description="Vuelve a iniciar sesión para administrar tus horarios."
+        action={
+          <Link href="/login/doctor">
+            <Button size="small">Iniciar sesión</Button>
+          </Link>
+        }
+      />
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <Title level={2}>Gestión de Horarios</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => handleOpenModal(selectedDate)}
-          disabled={services.length === 0}
-        >
-          Crear Horario
-        </Button>
-      </div>
+  const disponiblesDelMes = slots.filter((s) => s.is_available).length;
 
-      {services.length === 0 && (
-        <Card>
-          <div className="text-center py-8">
-            <p className="text-gray-500 mb-4">
-              Primero debes seleccionar los servicios que ofreces en la sección{" "}
-              <strong>Mis Servicios</strong>
-            </p>
-          </div>
-        </Card>
+  return (
+    <Flex vertical gap={token.marginLG}>
+      <Flex justify="space-between" align="flex-start" gap={token.margin} wrap>
+        <div>
+          <Title level={2} style={{ marginTop: 0, marginBottom: token.marginXXS }}>
+            Horarios de atención
+          </Title>
+          <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            Los bloques que abres aquí son los que tus pacientes pueden reservar. Las horas son
+            de Monterrey.
+          </Paragraph>
+        </div>
+        <Space wrap>
+          <Button
+            size="large"
+            icon={<ThunderboltOutlined />}
+            onClick={abrirLote}
+            disabled={servicios.length === 0}
+          >
+            Generar varios
+          </Button>
+          <Button
+            type="primary"
+            size="large"
+            icon={<PlusOutlined />}
+            onClick={() => abrirNuevo()}
+            disabled={servicios.length === 0}
+          >
+            Nuevo horario
+          </Button>
+        </Space>
+      </Flex>
+
+      {servicios.length === 0 && !loading && (
+        // Sin servicios propios no hay nada que ofrecer en un horario: la API
+        // rechaza el alta, así que conviene decirlo antes de intentarlo.
+        <Alert
+          type="warning"
+          showIcon
+          title="Primero elige los servicios que ofreces"
+          description="Un horario siempre corresponde a un servicio tuyo. Mientras no tengas ninguno marcado, no puedes abrir horarios."
+          action={
+            <Link href="/admin/mis-servicios">
+              <Button size="small">Ir a Mis Servicios</Button>
+            </Link>
+          }
+        />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendario */}
-        <Card className="lg:col-span-2">
-          <Calendar
-            value={selectedDate}
-            onSelect={handleDateSelect}
-            cellRender={dateCellRender}
-          />
-        </Card>
+      <Row gutter={[token.margin, token.margin]}>
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic
+              title={`Horarios en ${mes.format("MMMM")}`}
+              value={slots.length}
+              loading={loading}
+              styles={{ content: { color: token.colorPrimary } }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic
+              title="Disponibles"
+              value={disponiblesDelMes}
+              loading={loading}
+              styles={{ content: { color: token.colorSuccess } }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic
+              title="Servicios que ofreces"
+              value={servicios.length}
+              loading={loading}
+              styles={{ content: { color: token.colorInfo } }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-        {/* Resumen del día */}
-        <Card
-          title={
-            <span>
-              Horarios del {selectedDate.format("DD/MM/YYYY")}
-            </span>
-          }
-          extra={
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => handleOpenModal(selectedDate)}
-              disabled={services.length === 0}
-            >
-              Agregar
-            </Button>
-          }
-        >
-          {loading ? (
-            <div className="text-center py-8">
-              <Spin />
-            </div>
-          ) : selectedDaySlots.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No hay horarios para este día</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {selectedDaySlots.map((slot) => (
-                <Card
-                  key={slot.id}
-                  size="small"
-                  className="shadow-sm"
-                  extra={
-                    <Space size="small">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<EditOutlined />}
-                        onClick={() => handleOpenModal(undefined, slot)}
-                      />
-                      <Button
-                        type="text"
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(slot)}
-                      />
-                    </Space>
-                  }
-                >
-                  <Space orientation="vertical" size={2} className="w-full">
-                    <span className="font-medium">{slot.service?.title}</span>
-                    <Space size="small">
-                      <ClockCircleOutlined />
-                      <span className="text-sm">
-                        {slot.start_time.substring(0, 5)} -{" "}
-                        {slot.end_time.substring(0, 5)}
-                      </span>
-                    </Space>
-                    <Space size="small">
-                      <Tag color={slot.modality === 'online' ? 'blue' : 'green'}>
-                        {slot.modality === 'online' ? '💻 Online' : '🏥 Presencial'}
-                      </Tag>
-                      <Tag
-                        color={slot.is_available ? "success" : "default"}
-                        className="w-fit"
-                      >
-                        {slot.is_available ? "Disponible" : "No disponible"}
-                      </Tag>
-                    </Space>
-                    {slot.notes && (
-                      <p className="text-xs text-gray-500 mt-1">{slot.notes}</p>
-                    )}
-                  </Space>
-                </Card>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+      <Row gutter={[token.margin, token.margin]}>
+        <Col xs={24} lg={15}>
+          <Card
+            title="Calendario"
+            extra={
+              <Button icon={<ReloadOutlined />} onClick={refrescar} loading={loading}>
+                Actualizar
+              </Button>
+            }
+          >
+            <Calendar
+              value={diaElegido}
+              onSelect={(fecha) => setDiaElegido(fecha)}
+              onPanelChange={(fecha) => {
+                setMes(fecha);
+                setDiaElegido(fecha);
+              }}
+              /*
+               * `cellRender` (dateCellRender quedó deprecada) sustituye sólo el
+               * CONTENIDO de la celda, no la celda entera: el número del día ya
+               * lo pinta antd aparte. Devolver aquí `info.originNode` lo
+               * duplicaba.
+               */
+              cellRender={(fecha, info) => {
+                if (info.type !== "date") return info.originNode;
+                const delDia = porFecha.get(fecha.format(FORMATO_FECHA)) ?? [];
+                if (delDia.length === 0) return null;
+                const libres = delDia.filter((s) => s.is_available).length;
+                return (
+                  <Flex justify="center">
+                    <Badge
+                      count={delDia.length}
+                      color={libres > 0 ? token.colorSuccess : token.colorTextQuaternary}
+                      size="small"
+                    />
+                  </Flex>
+                );
+              }}
+            />
+          </Card>
+        </Col>
 
-      {/* Tabla de todos los horarios del mes */}
-      <Card title="Todos los horarios del mes">
+        <Col xs={24} lg={9}>
+          <Card
+            title={diaElegido.format("dddd D [de] MMMM")}
+            extra={
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => abrirNuevo(diaElegido)}
+                disabled={servicios.length === 0}
+              >
+                Agregar
+              </Button>
+            }
+          >
+            {slotsDelDia.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Sin horarios este día"
+              />
+            ) : (
+              <Flex vertical gap={token.marginSM}>
+                {slotsDelDia
+                  .slice()
+                  .sort((a, b) => a.start_time.localeCompare(b.start_time))
+                  .map((slot) => {
+                    const mod = slot.modality ? MODALIDADES[slot.modality] : undefined;
+                    return (
+                      <Card key={slot.id} size="small">
+                        <Flex justify="space-between" align="flex-start" gap={token.marginXS} wrap>
+                          <Flex vertical gap={2}>
+                            <Text strong>
+                              {leerHora(slot.start_time).format("HH:mm")} -{" "}
+                              {leerHora(slot.end_time).format("HH:mm")}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                              {slot.service?.title ?? "Servicio no disponible"}
+                            </Text>
+                            <Space size={4} wrap>
+                              {mod && <Tag color={mod.color}>{mod.texto}</Tag>}
+                              <Tag color={slot.is_available ? "success" : "default"}>
+                                {slot.is_available ? "Disponible" : "Cerrado"}
+                              </Tag>
+                              {slot.max_appointments > 1 && (
+                                <Tag>Cupo {slot.max_appointments}</Tag>
+                              )}
+                            </Space>
+                          </Flex>
+                          <Space size="small">
+                            <Tooltip title="Editar">
+                              <Button
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => abrirEdicion(slot)}
+                              />
+                            </Tooltip>
+                            <Tooltip title="Eliminar">
+                              <Button
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => eliminar(slot)}
+                              />
+                            </Tooltip>
+                          </Space>
+                        </Flex>
+                        {slot.notes && (
+                          <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                            {slot.notes}
+                          </Text>
+                        )}
+                      </Card>
+                    );
+                  })}
+              </Flex>
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      <Card title={`Todos los horarios de ${mes.format("MMMM [de] YYYY")}`}>
         <Table
-          columns={columns}
+          columns={columnas}
           dataSource={slots}
           rowKey="id"
           loading={loading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total) => `Total: ${total} horarios`,
+          scroll={{ x: "max-content" }}
+          pagination={{ pageSize: 10, hideOnSinglePage: true, responsive: true }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="No hay horarios este mes"
+              />
+            ),
           }}
         />
       </Card>
 
-      {/* Modal de crear/editar */}
       <Modal
-        title={editingSlot ? "Editar Horario" : "Crear Nuevo Horario"}
-        open={isModalOpen}
-        onOk={handleSubmit}
-        onCancel={handleCloseModal}
-        okText={editingSlot ? "Actualizar" : "Crear"}
+        title={editando ? "Editar horario" : "Nuevo horario"}
+        open={modalAbierto}
+        onOk={guardar}
+        onCancel={() => setModalAbierto(false)}
+        okText="Guardar"
         cancelText="Cancelar"
-        width={600}
+        confirmLoading={guardando}
+        width={560}
+        destroyOnHidden
       >
-        <Form form={form} layout="vertical" className="mt-6">
+        <Form form={form} layout="vertical" style={{ marginTop: token.margin }}>
           <Form.Item
-            name="serviceId"
             label="Servicio"
-            rules={[{ required: true, message: "Selecciona un servicio" }]}
+            name="serviceId"
+            rules={[{ required: true, message: "Elige el servicio" }]}
           >
-            <Select placeholder="Selecciona el servicio">
-              {services.map((service) => (
-                <Select.Option key={service.id} value={service.id}>
-                  {service.title} ({service.duration_minutes} min) -{" "}
-                  <Tag color={service.category === "Psicológica" ? "blue" : "green"}>
-                    {service.category}
-                  </Tag>
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="slotDate"
-            label="Fecha"
-            rules={[{ required: true, message: "Selecciona una fecha" }]}
-          >
-            <Calendar fullscreen={false} />
-          </Form.Item>
-
-          <Form.Item
-            name="timeRange"
-            label="Horario"
-            rules={[{ required: true, message: "Selecciona el horario" }]}
-          >
-            <TimePicker.RangePicker
-              format="HH:mm"
-              minuteStep={15}
-              placeholder={["Hora inicio", "Hora fin"]}
-              className="w-full"
+            <Select
+              placeholder="Selecciona"
+              options={servicios.map((s) => ({
+                value: s.id,
+                label: `${s.title} (${s.duration_minutes} min)`,
+              }))}
             />
           </Form.Item>
 
-          <Form.Item
-            name="maxAppointments"
-            label="Número máximo de citas"
-            rules={[
-              { required: true, message: "Ingresa el número de citas" },
-              { type: "number", min: 1, message: "Mínimo 1 cita" },
-            ]}
-          >
-            <InputNumber min={1} max={10} className="w-full" />
+          <Row gutter={token.margin}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label="Fecha"
+                name="slotDate"
+                rules={[{ required: true, message: "Elige la fecha" }]}
+              >
+                {/* DatePicker y no Calendar: es el control de un campo de fecha. */}
+                <DatePicker
+                  style={{ width: "100%" }}
+                  format="DD/MM/YYYY"
+                  minDate={dayjs().startOf("day")}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label="Horario"
+                name="timeRange"
+                rules={[{ required: true, message: "Indica el rango de horas" }]}
+              >
+                <TimePicker.RangePicker
+                  style={{ width: "100%" }}
+                  format="HH:mm"
+                  minuteStep={15}
+                  order={false}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={token.margin}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label="Modalidad"
+                name="modality"
+                tooltip="Sólo se listan las que admite el servicio elegido."
+                rules={[{ required: true, message: "Elige la modalidad" }]}
+              >
+                <Select options={modalidadesPermitidas} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label="Cupo"
+                name="maxAppointments"
+                tooltip="Cuántas citas caben en este bloque."
+                rules={[{ required: true, message: "Indica el cupo" }]}
+              >
+                <InputNumber min={1} max={10} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="Disponible" name="isAvailable" valuePropName="checked">
+            <Switch checkedChildren="Sí" unCheckedChildren="No" />
           </Form.Item>
 
-          <Form.Item
-            name="modality"
-            label="Modalidad del horario"
-            rules={[{ required: true, message: "Selecciona la modalidad" }]}
-          >
-            <Select placeholder="¿Online o presencial?">
-              <Select.Option value="online">💻 En línea (videollamada)</Select.Option>
-              <Select.Option value="presencial">🏥 Presencial (consultorio)</Select.Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item name="notes" label="Notas (opcional)">
-            <TextArea
-              rows={3}
-              placeholder="Notas adicionales sobre este horario..."
-            />
+          <Form.Item label="Notas" name="notes">
+            <TextArea rows={2} maxLength={300} showCount placeholder="Opcional." />
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+
+      <Modal
+        title="Generar varios horarios"
+        open={modalLote}
+        onOk={generarLote}
+        onCancel={() => setModalLote(false)}
+        okText={previaLote?.total ? `Generar ${previaLote.total}` : "Generar"}
+        cancelText="Cancelar"
+        confirmLoading={generando}
+        okButtonProps={{ disabled: !previaLote?.total }}
+        width={620}
+        destroyOnHidden
+      >
+        <Paragraph type="secondary">
+          Define una regla y se crean todos los bloques de una vez. Los que se encimen con
+          horarios que ya tengas se omiten, no se sobrescriben.
+        </Paragraph>
+
+        <Form form={formLote} layout="vertical">
+          <Form.Item
+            label="Servicio"
+            name="serviceId"
+            rules={[{ required: true, message: "Elige el servicio" }]}
+          >
+            <Select
+              placeholder="Selecciona"
+              options={servicios.map((s) => ({
+                value: s.id,
+                label: `${s.title} (${s.duration_minutes} min)`,
+              }))}
+              onChange={(id) => {
+                // El bloque arranca igual a la duración del servicio: es lo que
+                // hace que los horarios cuadren con la cita real.
+                const s = servicios.find((x) => x.id === id);
+                if (s) formLote.setFieldValue("blockMinutes", s.duration_minutes);
+              }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="Desde / hasta"
+            name="rango"
+            rules={[{ required: true, message: "Elige el rango de fechas" }]}
+          >
+            <DatePicker.RangePicker
+              style={{ width: "100%" }}
+              format="DD/MM/YYYY"
+              minDate={dayjs().startOf("day")}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="Días de la semana"
+            name="weekdays"
+            rules={[{ required: true, message: "Elige al menos un día" }]}
+          >
+            <Checkbox.Group
+              options={[
+                { label: "Lun", value: 1 },
+                { label: "Mar", value: 2 },
+                { label: "Mié", value: 3 },
+                { label: "Jue", value: 4 },
+                { label: "Vie", value: 5 },
+                { label: "Sáb", value: 6 },
+                { label: "Dom", value: 0 },
+              ]}
+            />
+          </Form.Item>
+
+          <Row gutter={token.margin}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label="Franja del día"
+                name="franja"
+                tooltip="Se parte en bloques del tamaño indicado."
+                rules={[{ required: true, message: "Indica la franja" }]}
+              >
+                <TimePicker.RangePicker
+                  style={{ width: "100%" }}
+                  format="HH:mm"
+                  minuteStep={15}
+                  order={false}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                label="Duración de cada bloque"
+                name="blockMinutes"
+                rules={[{ required: true, message: "Indica la duración" }]}
+              >
+                <InputNumber min={15} max={240} step={15} suffix="min" style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={token.margin}>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Modalidad" name="modality" rules={[{ required: true }]}>
+                <Select options={modalidadesLote} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Cupo por bloque" name="maxAppointments" rules={[{ required: true }]}>
+                <InputNumber min={1} max={10} style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+
+        {previaLote && (
+          <Alert
+            type={previaLote.total ? "info" : "warning"}
+            showIcon
+            title={
+              previaLote.total
+                ? `Se generarán ${previaLote.total} horarios`
+                : "Con estos datos no se genera ningún horario"
+            }
+            description={
+              previaLote.total
+                ? `${previaLote.porDia} bloque(s) por día en ${previaLote.dias} día(s).`
+                : "Revisa que la franja sea más larga que un bloque y que haya días elegidos."
+            }
+          />
+        )}
+      </Modal>
+    </Flex>
   );
 }

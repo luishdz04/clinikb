@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // GET: Obtener slots del doctor (con filtros opcionales)
+/**
+ * Traduce los errores de integridad de la base a algo que el usuario entienda.
+ *
+ * `availability_slots` tiene una restricción EXCLUDE que impide traslapes por
+ * doctor, más CHECKs de rango y de cupo. Son la última línea de defensa: cubren
+ * las condiciones de carrera que la verificación previa en la API no puede.
+ */
+function traducirErrorDeHorario(error: { code?: string; message?: string }): string | null {
+  if (error.code === "23P01") {
+    return "Ese horario se encima con otro que ya tienes ese día.";
+  }
+  if (error.code === "23514") {
+    if (error.message?.includes("rango_valido")) {
+      return "La hora de fin debe ser posterior a la de inicio.";
+    }
+    if (error.message?.includes("cupo_valido")) {
+      return "El cupo debe ser de al menos una cita.";
+    }
+  }
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient();
@@ -144,9 +166,17 @@ export async function POST(request: NextRequest) {
       .eq("slot_date", slotDate)
       .or(`and(start_time.lte.${startTime},end_time.gt.${startTime}),and(start_time.lt.${endTime},end_time.gte.${endTime}),and(start_time.gte.${startTime},end_time.lte.${endTime})`);
 
+    // Si la verificación falla hay que abortar, no seguir: antes se registraba
+    // el error y se insertaba igual, creando justo el traslape que se buscaba
+    // evitar. La base lo bloquea de todos modos, pero conviene un mensaje claro.
     if (overlapError) {
       console.error("Error checking overlap:", overlapError);
-    } else if (overlappingSlots && overlappingSlots.length > 0) {
+      return NextResponse.json(
+        { error: "No se pudo verificar el horario. Intenta de nuevo." },
+        { status: 500 }
+      );
+    }
+    if (overlappingSlots && overlappingSlots.length > 0) {
       return NextResponse.json(
         { error: "Ya existe un horario en este rango de tiempo" },
         { status: 400 }
@@ -175,6 +205,8 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("Error creating slot:", error);
+      const amigable = traducirErrorDeHorario(error);
+      if (amigable) return NextResponse.json({ error: amigable }, { status: 400 });
       return NextResponse.json(
         { error: "Error al crear el slot" },
         { status: 500 }
@@ -244,7 +276,15 @@ export async function PUT(request: NextRequest) {
     }
 
     // Preparar datos de actualización
-    const updateData: any = {};
+    const updateData: {
+      slot_date?: string;
+      start_time?: string;
+      end_time?: string;
+      max_appointments?: number;
+      modality?: string;
+      notes?: string | null;
+      is_available?: boolean;
+    } = {};
     if (slotDate !== undefined) updateData.slot_date = slotDate;
     if (startTime !== undefined) updateData.start_time = startTime;
     if (endTime !== undefined) updateData.end_time = endTime;
@@ -269,7 +309,12 @@ export async function PUT(request: NextRequest) {
 
       if (overlapError) {
         console.error("Error checking overlap:", overlapError);
-      } else if (overlappingSlots && overlappingSlots.length > 0) {
+        return NextResponse.json(
+          { error: "No se pudo verificar el horario. Intenta de nuevo." },
+          { status: 500 }
+        );
+      }
+      if (overlappingSlots && overlappingSlots.length > 0) {
         return NextResponse.json(
           { error: "Ya existe un horario en este rango de tiempo" },
           { status: 400 }
@@ -290,6 +335,8 @@ export async function PUT(request: NextRequest) {
 
     if (error) {
       console.error("Error updating slot:", error);
+      const amigable = traducirErrorDeHorario(error);
+      if (amigable) return NextResponse.json({ error: amigable }, { status: 400 });
       return NextResponse.json(
         { error: "Error al actualizar el slot" },
         { status: 500 }

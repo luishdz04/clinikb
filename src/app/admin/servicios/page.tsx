@@ -472,7 +472,7 @@ export default function ServiciosPage() {
                   min={15}
                   max={240}
                   step={15}
-                  addonAfter="min"
+                  suffix="min"
                   style={{ width: "100%" }}
                 />
               </Form.Item>

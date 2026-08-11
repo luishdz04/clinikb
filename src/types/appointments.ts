@@ -35,6 +35,8 @@ export interface AvailabilitySlot {
   is_available: boolean;
   max_appointments: number;
   notes: string | null;
+  /** 'online' | 'presencial'. La base lo restringe con un CHECK. */
+  modality?: string | null;
   created_at: string;
   updated_at: string;
   service?: Service; // Join
