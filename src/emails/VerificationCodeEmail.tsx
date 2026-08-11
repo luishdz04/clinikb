@@ -61,13 +61,13 @@ export function VerificationCodeEmail({
             <Hr style={hr} />
 
             <Text style={muted}>
-              Si tú no solicitaste este registro, ignora este mensaje: sin el código no se
-              crea ninguna cuenta.
+              Si tú no solicitaste este registro, ignora este mensaje: sin el código la
+              cuenta no se activa y nadie podrá usarla.
             </Text>
 
             <Text style={notice}>
-              Recuerda que tu registro pasa por una revisión antes de quedar activo. Te
-              avisaremos por este mismo medio cuando sea aprobado.
+              En cuanto escribas el código, tu cuenta queda activa y podrás iniciar sesión
+              para agendar tus citas.
             </Text>
           </Section>
 
