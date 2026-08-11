@@ -9,6 +9,15 @@ const { Title, Text } = Typography;
 /** Supabase limita el reenvío a 1 por minuto (Auth > Rate Limits). */
 const SEGUNDOS_ENTRE_REENVIOS = 60;
 
+/**
+ * Cuántos dígitos trae el código.
+ *
+ * Tiene que coincidir con Supabase Dashboard -> Authentication -> Providers ->
+ * Email -> Email OTP Length. Si no coinciden, la caja no deja escribir el
+ * código completo y la verificación se vuelve imposible.
+ */
+const LARGO_DEL_CODIGO = 8;
+
 interface VerificationCodeStepProps {
   email: string;
   /** Mensaje inicial, p. ej. cuando se detectó un registro sin confirmar. */
@@ -17,7 +26,7 @@ interface VerificationCodeStepProps {
 }
 
 /**
- * Captura del código de 6 dígitos que Auth envió por correo.
+ * Captura del código que Auth envió por correo.
  *
  * El código no se valida aquí: se manda a /api/auth/verify-code, que llama a
  * `verifyOtp` de Supabase. Este componente solo maneja la interacción.
@@ -104,7 +113,7 @@ export function VerificationCodeStep({ email, aviso, onVerified }: VerificationC
           Confirma tu correo
         </Title>
         <Text type="secondary" style={{ textAlign: "center" }}>
-          Enviamos un código de 6 dígitos a <Text strong>{email}</Text>
+          Enviamos un código de {LARGO_DEL_CODIGO} dígitos a <Text strong>{email}</Text>
         </Text>
       </Flex>
 
@@ -112,12 +121,12 @@ export function VerificationCodeStep({ email, aviso, onVerified }: VerificationC
       {error && <Alert title={error} type="error" showIcon style={{ width: "100%" }} />}
 
       <Input.OTP
-        length={6}
+        length={LARGO_DEL_CODIGO}
         value={codigo}
         onChange={(valor) => {
           setCodigo(valor);
-          // Se envía solo al completar los 6 dígitos: evita un botón de más.
-          if (valor.length === 6) verificar(valor);
+          // Se envía solo al completar el código: evita un botón de más.
+          if (valor.length === LARGO_DEL_CODIGO) verificar(valor);
         }}
         disabled={verificando}
         size="large"
@@ -129,7 +138,7 @@ export function VerificationCodeStep({ email, aviso, onVerified }: VerificationC
         size="large"
         block
         loading={verificando}
-        disabled={codigo.length !== 6}
+        disabled={codigo.length !== LARGO_DEL_CODIGO}
         onClick={() => verificar(codigo)}
       >
         Verificar y completar registro

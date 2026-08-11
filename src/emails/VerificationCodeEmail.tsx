@@ -12,7 +12,7 @@ import {
 import * as React from "react";
 
 interface VerificationCodeEmailProps {
-  /** Código de 6 dígitos que genera Supabase Auth. */
+  /** Código numérico que genera Supabase Auth (largo según Email OTP Length). */
   token: string;
   /** Nombre del paciente, si Auth lo trae en su metadata. */
   fullName?: string;

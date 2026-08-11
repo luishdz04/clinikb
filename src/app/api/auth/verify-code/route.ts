@@ -7,7 +7,7 @@ import { getNewRegistrationEmailHTML } from '@/lib/email/registration-notificati
 export const dynamic = 'force-dynamic';
 
 /**
- * Valida el código de 6 dígitos que Auth mandó por correo.
+ * Valida el código que Auth mandó por correo.
  *
  * Quien valida el código es Supabase (`verifyOtp`): aquí no se compara nada a
  * mano, ni se guarda el código en ningún lado. Auth ya controla la vigencia y
