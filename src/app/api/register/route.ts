@@ -1,55 +1,94 @@
-import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createAuthAnonClient, traducirErrorAuth } from '@/lib/supabase/auth-anon';
 import { NextResponse } from 'next/server';
 import { PatientFormData } from '@/types/patient';
-import { sendEmail } from '@/lib/email/nodemailer';
-import { getNewRegistrationEmailHTML } from '@/lib/email/registration-notification';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
     const formData: PatientFormData = await request.json();
-    const supabase = await createClient();
     const adminSupabase = createAdminClient();
+    const anonSupabase = createAuthAnonClient();
 
-    if (!adminSupabase) {
+    if (!adminSupabase || !anonSupabase) {
       return NextResponse.json(
         { error: 'Error de configuración del servidor' },
         { status: 500 }
       );
     }
 
-    // Validar que el email no esté registrado usando admin client
+    // ¿Ya hay un registro con este correo?
     const { data: existingPatient } = await adminSupabase
       .from('patients')
-      .select('id')
+      .select('id, user_id')
       .eq('email', formData.email)
-      .single();
+      .maybeSingle();
 
     if (existingPatient) {
-      return NextResponse.json(
-        { error: 'Este correo electrónico ya está registrado' },
-        { status: 400 }
-      );
+      // Distinguir "ya registrado" de "registró pero nunca confirmó": en el
+      // segundo caso no hay que bloquearlo, hay que dejarlo terminar.
+      const { data: existingUser } = existingPatient.user_id
+        ? await adminSupabase.auth.admin.getUserById(existingPatient.user_id)
+        : { data: { user: null } };
+
+      const yaConfirmo = Boolean(existingUser?.user?.email_confirmed_at);
+
+      if (yaConfirmo) {
+        return NextResponse.json(
+          { error: 'Este correo electrónico ya está registrado' },
+          { status: 400 }
+        );
+      }
+
+      // Correo sin confirmar: se le manda un código nuevo y el formulario
+      // salta directo a la pantalla de verificación.
+      const { error: resendError } = await anonSupabase.auth.resend({
+        type: 'signup',
+        email: formData.email,
+      });
+
+      if (resendError) {
+        console.error('Error resending signup code:', resendError);
+        return NextResponse.json(
+          {
+            pendingVerification: true,
+            email: formData.email,
+            error: traducirErrorAuth(resendError.message),
+          },
+          { status: 429 }
+        );
+      }
+
+      return NextResponse.json({
+        pendingVerification: true,
+        email: formData.email,
+        message: 'Ya tenías un registro sin confirmar. Te enviamos un código nuevo.',
+      });
     }
 
-    // Crear usuario en Auth (sin auto-confirmación hasta aprobación)
-    const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
+    // Alta nueva. Se usa signUp (no admin.createUser) porque es lo que dispara
+    // el correo de confirmación: admin.createUser crea al usuario en silencio.
+    // El usuario queda sin confirmar en Auth hasta que valide el código.
+    const { data: authData, error: authError } = await anonSupabase.auth.signUp({
       email: formData.email,
       password: formData.password,
-      email_confirm: false, // No confirmar hasta que sea aprobado
-      user_metadata: {
-        full_name: formData.full_name,
-        phone: formData.phone,
-        role: 'patient',
-        status: 'pending',
+      options: {
+        data: {
+          full_name: formData.full_name,
+          phone: formData.phone,
+          role: 'patient',
+          status: 'pending',
+        },
       },
     });
 
     if (authError) {
       console.error('Error creating auth user:', authError);
-      return NextResponse.json({ error: authError.message }, { status: 400 });
+      return NextResponse.json(
+        { error: traducirErrorAuth(authError.message) },
+        { status: 400 }
+      );
     }
 
     if (!authData.user) {
@@ -75,6 +114,13 @@ export async function POST(request: Request) {
           city: formData.city,
           state: formData.state,
           postal_code: formData.postal_code,
+          marital_status: formData.marital_status,
+          religion: formData.religion,
+          education_level: formData.education_level,
+          recurrent_illnesses: formData.recurrent_illnesses,
+          consultation_goals: formData.consultation_goals,
+          family_structure_status: formData.family_structure_status,
+          family_structure_reason: formData.family_structure_reason,
           emergency_contact_name: formData.emergency_contact_name,
           emergency_contact_phone: formData.emergency_contact_phone,
           referral_source: formData.referral_source,
@@ -94,42 +140,44 @@ export async function POST(request: Request) {
       );
     }
 
-    // Enviar notificación al admin
-    try {
-      const origin = request.headers.get('origin') || 'http://localhost:3000';
-      const dashboardUrl = `${origin}/admin/dashboard`;
-      const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
-      
-      if (adminEmail) {
-        const html = getNewRegistrationEmailHTML(
-          patient.full_name,
-          patient.email,
-          dashboardUrl
-        );
+    // Estructura familiar. Va en su propia tabla (1 fila por integrante).
+    // Sólo se guardan si el paciente declaró que iba a registrarlos: así la
+    // declaración y las filas nunca se contradicen, aunque el POST no venga
+    // del formulario.
+    const declaroIntegrantes = formData.family_structure_status === 'registrada';
+    const familyMembers = (declaroIntegrantes ? formData.family_members ?? [] : [])
+      .filter((member) => member?.full_name?.trim() && member?.relationship?.trim())
+      .map((member, index) => ({
+        patient_id: patient.id,
+        full_name: member.full_name.trim(),
+        relationship: member.relationship.trim(),
+        age: member.age ?? null,
+        occupation: member.occupation?.trim() || null,
+        position: index,
+      }));
 
-        await sendEmail({
-          to: adminEmail,
-          subject: `CliniKB - Nuevo Registro Pendiente: ${patient.full_name}`,
-          html,
-        });
+    if (familyMembers.length > 0) {
+      const { error: familyError } = await adminSupabase
+        .from('patient_family_members')
+        .insert(familyMembers);
 
-        console.log('Admin notification sent to:', adminEmail);
+      // No abortamos el registro: el paciente ya existe y su alta es lo crítico.
+      // La estructura familiar se puede completar después desde la ficha.
+      if (familyError) {
+        console.error('Error inserting family members:', familyError);
       }
-    } catch (emailError) {
-      console.error('Error sending admin notification:', emailError);
-      // No fallar el registro si falla el email
     }
 
-    console.log('Patient registered successfully - pending approval:', patient.id);
+    // El aviso al admin ya NO se manda aquí: se manda al verificar el código
+    // (ver /api/auth/verify-code). Si se mandara ahora, el admin recibiría
+    // solicitudes de gente que nunca confirmó su correo.
+    console.log('Patient registered - awaiting email verification:', patient.id);
 
     return NextResponse.json({
       success: true,
-      message: 'Registro exitoso. Tu solicitud está pendiente de aprobación.',
-      patient: {
-        id: patient.id,
-        full_name: patient.full_name,
-        email: patient.email,
-      },
+      pendingVerification: true,
+      email: patient.email,
+      message: 'Te enviamos un código de verificación a tu correo.',
     });
   } catch (error) {
     console.error('Registration error:', error);

@@ -17,7 +17,7 @@ export function getNewRegistrationEmailHTML(patientName: string, patientEmail: s
                 <!-- Header con Logo -->
                 <tr>
                   <td style="background-color: #367c84; padding: 40px 30px; text-align: center;">
-                    <img src="https://eiepzafndtiimxtadvuy.supabase.co/storage/v1/object/public/assets/clinikb-logo.png" alt="CliniKB" style="width: 100px; height: 100px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;" />
+                    <img src="https://clinikb.com.mx/images/logo/clinikb.png" alt="CliniKB" style="width: 100px; height: 100px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;" />
                     <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Nuevo Registro Pendiente</h1>
                   </td>
                 </tr>

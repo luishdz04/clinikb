@@ -143,7 +143,7 @@ export async function POST(request: Request) {
 
     // Enviar notificación al admin
     try {
-      const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+      const adminEmail = process.env.ADMIN_EMAIL;
       if (adminEmail) {
         const formattedStartTime = start_time.substring(0, 5);
         const formattedEndTime = end_time.substring(0, 5);

@@ -7,7 +7,7 @@ import { Form, Input, Button, Alert, Divider, Flex, Typography, App, theme } fro
 import { UserOutlined, LockOutlined, ArrowLeftOutlined } from "@ant-design/icons";
 import AuthShell from "@/components/layout/AuthShell";
 
-const { Text, Link: AntLink } = Typography;
+const { Text } = Typography;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -80,16 +80,25 @@ export default function LoginPage() {
         </Form>
 
         <Flex vertical align="center" gap={token.marginXS}>
-          <Link href="/recuperar-password">
-            <AntLink>¿Olvidaste tu contraseña?</AntLink>
+          {/*
+           * Los enlaces internos usan `Link` de Next directamente, con los tokens
+           * de antd para el color: envolver un `Typography.Link` produciría un
+           * <a> dentro de otro <a> y rompería la hidratación. El `passHref` +
+           * `legacyBehavior` que antes resolvía esto ya no existe en Next 16.
+           */}
+          <Link href="/recuperar-password" style={{ color: token.colorLink }}>
+            ¿Olvidaste tu contraseña?
           </Link>
 
           <Divider style={{ margin: `${token.marginXS}px 0` }} />
 
           <Text type="secondary">
             ¿No tienes cuenta?{" "}
-            <Link href="/registro">
-              <AntLink strong>Regístrate aquí</AntLink>
+            <Link
+              href="/registro"
+              style={{ color: token.colorLink, fontWeight: token.fontWeightStrong }}
+            >
+              Regístrate aquí
             </Link>
           </Text>
 

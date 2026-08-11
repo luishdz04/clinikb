@@ -7,11 +7,11 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const customEmail = searchParams.get('to');
-    const testEmail = customEmail || process.env.SMTP_USER; // Usar parámetro o tu correo
+    const testEmail = customEmail || process.env.ADMIN_EMAIL;
     
     if (!testEmail) {
       return NextResponse.json(
-        { error: 'No se encontró SMTP_USER configurado' },
+        { error: 'No se encontró ADMIN_EMAIL configurado' },
         { status: 500 }
       );
     }

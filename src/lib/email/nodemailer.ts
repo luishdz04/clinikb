@@ -1,36 +1,10 @@
-import nodemailer from 'nodemailer';
-
-export async function sendEmail({
-  to,
-  subject,
-  html,
-}: {
-  to: string;
-  subject: string;
-  html: string;
-}) {
-  // Configuración SMTP
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST, // ej: smtp.gmail.com
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true', // true para 465, false para otros puertos
-    auth: {
-      user: process.env.SMTP_USER, // tu correo
-      pass: process.env.SMTP_PASS, // tu contraseña o app password
-    },
-  });
-
-  // Enviar email
-  const info = await transporter.sendMail({
-    from: `"${process.env.SMTP_FROM_NAME || 'CliniKB'}" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
-    to,
-    subject,
-    html,
-  });
-
-  console.log('Email sent:', info.messageId);
-  return info;
-}
+/**
+ * El envío ya NO va por SMTP: pasó a Resend (ver `@/lib/email/send`).
+ *
+ * Se reexporta aquí para no tocar los archivos que ya importaban `sendEmail`
+ * desde esta ruta. Para código nuevo, importa directo de `@/lib/email/send`.
+ */
+export { sendEmail } from './send';
 
 // Template HTML para email de aprobación
 export function getApprovalEmailHTML(patientName: string, loginUrl: string) {
@@ -51,7 +25,7 @@ export function getApprovalEmailHTML(patientName: string, loginUrl: string) {
                 <!-- Header con Logo -->
                 <tr>
                   <td style="background-color: #55c5c4; padding: 40px 30px; text-align: center;">
-                    <img src="https://eiepzafndtiimxtadvuy.supabase.co/storage/v1/object/public/assets/clinikb-logo.png" alt="CliniKB" style="width: 100px; height: 100px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;" />
+                    <img src="https://clinikb.com.mx/images/logo/clinikb.png" alt="CliniKB" style="width: 100px; height: 100px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;" />
                     <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">¡Solicitud Aprobada!</h1>
                   </td>
                 </tr>

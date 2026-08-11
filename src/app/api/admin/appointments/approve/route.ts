@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import nodemailer from "nodemailer";
+import { sendEmail } from "@/lib/email/send";
 import { getAppointmentApprovedEmailHTML } from "@/lib/email/approval-emails";
-
-// Configuración del transportador de correo
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
 
 export async function POST(request: NextRequest) {
   try {
@@ -109,8 +98,7 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      await transporter.sendMail({
-        from: process.env.SMTP_USER,
+      await sendEmail({
         to: appointment.patient.email,
         subject: "✅ Tu cita ha sido confirmada - CliniKB",
         html: emailHTML,

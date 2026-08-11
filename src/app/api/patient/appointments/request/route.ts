@@ -158,7 +158,7 @@ export async function POST(request: Request) {
 
     // Enviar notificación al admin
     try {
-      const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+      const adminEmail = process.env.ADMIN_EMAIL;
       if (adminEmail) {
         const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
         const dashboardUrl = `${origin}/admin/dashboard`;

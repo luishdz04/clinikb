@@ -49,3 +49,9 @@ next-env.d.ts
 
 # otros proyectos
 muscleupgym-renueve-main/
+
+# docs de antd generadas por el CLI (~2MB, regenerables)
+ant.design*.txt
+
+# ajustes locales de Claude Code (por máquina, no compartibles)
+.claude/settings.local.json
