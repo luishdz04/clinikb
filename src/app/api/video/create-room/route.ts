@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createVideoCall } from "@/lib/stream";
+import { createVideoCall, isStreamConfigured } from "@/lib/stream";
 import { nanoid } from "nanoid";
 
 export async function POST(request: NextRequest) {
   try {
+    // Sin credenciales de Stream esto no puede funcionar. Se responde 503 para
+    // que quede claro que es configuración faltante y no una falla del código.
+    if (!isStreamConfigured()) {
+      return NextResponse.json(
+        { error: "Las videollamadas no están configuradas en este servidor." },
+        { status: 503 }
+      );
+    }
+
     const { appointmentId, createdBy } = await request.json();
 
     if (!appointmentId || !createdBy) {

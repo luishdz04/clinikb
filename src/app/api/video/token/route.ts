@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generateUserToken } from "@/lib/stream";
+import { generateUserToken, isStreamConfigured } from "@/lib/stream";
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isStreamConfigured()) {
+      return NextResponse.json(
+        { error: "Las videollamadas no están configuradas en este servidor." },
+        { status: 503 }
+      );
+    }
+
     const { userId } = await request.json();
 
     if (!userId) {
