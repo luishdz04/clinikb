@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -117,6 +117,11 @@ export default function RegisterPage() {
   // confirmar: en ese caso no se rehace el registro, solo se verifica.
   const [verificando, setVerificando] = useState<{ email: string; aviso?: string } | null>(null);
 
+  // Consulta del correo al salir del campo.
+  const [revisandoCorreo, setRevisandoCorreo] = useState(false);
+  /** Último correo ya consultado, para no repetir la petición en cada blur. */
+  const correoRevisado = useRef("");
+
   // La edad se muestra derivada de la fecha de nacimiento: no se captura ni se
   // guarda, así nunca queda desactualizada respecto a la fecha real.
   const fechaNacimiento = Form.useWatch("date_of_birth", form);
@@ -142,35 +147,11 @@ export default function RegisterPage() {
       const values = await form.validateFields();
       setFormData({ ...formData, ...values });
 
-      // En el primer paso se revisa el correo antes de dejarlo avanzar: si ya
-      // tenía un registro sin confirmar, no tiene caso que llene los otros
-      // cuatro pasos para enterarse al final.
+      // Red de seguridad: normalmente esto ya se resolvió en el onBlur del
+      // campo, pero si alguien llega aquí sin haberlo disparado (autocompletar,
+      // Enter directo), se revisa antes de dejarlo avanzar.
       if (currentStep === 0 && values.email) {
-        const estado = await revisarCorreo(values.email);
-
-        if (estado === "registrado") {
-          form.setFields([
-            {
-              name: "email",
-              errors: ["Este correo ya está registrado. Inicia sesión."],
-            },
-          ]);
-          return;
-        }
-
-        if (estado === "pendiente") {
-          setVerificando({
-            email: values.email,
-            aviso: "Ya tenías un registro sin confirmar. Te enviamos un código nuevo.",
-          });
-          // El código se pide aparte: el alta no se rehace.
-          fetch("/api/auth/resend-code", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: values.email }),
-          }).catch(() => {});
-          return;
-        }
+        if (await atenderCorreoConocido(values.email.trim())) return;
       }
 
       if (currentStep < steps.length - 1) {
@@ -195,6 +176,57 @@ export default function RegisterPage() {
       return data.estado ?? "libre";
     } catch {
       return "libre";
+    }
+  };
+
+  /**
+   * Reacciona a un correo ya conocido. Devuelve true si se hizo cargo de la
+   * situación (y por tanto no hay que dejar avanzar el formulario).
+   */
+  const atenderCorreoConocido = async (email: string): Promise<boolean> => {
+    const estado = await revisarCorreo(email);
+
+    if (estado === "registrado") {
+      form.setFields([
+        { name: "email", errors: ["Este correo ya está registrado. Inicia sesión."] },
+      ]);
+      return true;
+    }
+
+    if (estado === "pendiente") {
+      setVerificando({
+        email,
+        aviso: "Ya tenías un registro sin confirmar. Te enviamos un código nuevo.",
+      });
+      // Se pide un código nuevo aparte: el alta no se rehace.
+      fetch("/api/auth/resend-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }).catch(() => {});
+      return true;
+    }
+
+    return false;
+  };
+
+  /**
+   * Revisión al salir del campo de correo, para no hacer llenar el formulario
+   * entero antes de avisar. Se recuerda el último correo consultado para no
+   * repetir la petición cada vez que el campo pierde el foco.
+   */
+  const handleEmailBlur = async (valor: string) => {
+    const email = valor.trim();
+    if (!email || email === correoRevisado.current) return;
+    // Sin un correo con forma válida no tiene sentido consultar.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+
+    correoRevisado.current = email;
+    setRevisandoCorreo(true);
+    try {
+      await atenderCorreoConocido(email);
+    } finally {
+      setRevisandoCorreo(false);
     }
   };
 
@@ -333,8 +365,16 @@ export default function RegisterPage() {
                     { required: true, message: "Ingresa tu correo" },
                     { type: "email", message: "Correo inválido" },
                   ]}
+                  hasFeedback={revisandoCorreo}
+                  validateStatus={revisandoCorreo ? "validating" : undefined}
+                  help={revisandoCorreo ? "Revisando el correo..." : undefined}
                 >
-                  <Input size="large" placeholder="tu@email.com" />
+                  <Input
+                    size="large"
+                    placeholder="tu@email.com"
+                    autoComplete="email"
+                    onBlur={(e) => handleEmailBlur(e.target.value)}
+                  />
                 </Form.Item>
 
                 <Row gutter={token.margin}>

@@ -25,10 +25,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ estado: 'libre' });
     }
 
+    // ilike y no eq: los correos viejos se guardaron sin normalizar, así que
+    // "Ing.luis@..." y "ing.luis@..." tienen que encontrar el mismo registro.
     const { data: patient } = await adminSupabase
       .from('patients')
       .select('user_id')
-      .eq('email', email.trim().toLowerCase())
+      .ilike('email', email.trim())
       .maybeSingle();
 
     if (!patient) {

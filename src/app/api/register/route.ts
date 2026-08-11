@@ -18,11 +18,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // ¿Ya hay un registro con este correo?
+    // Se normaliza a minúsculas: Auth ya lo hace por su cuenta, y sin esto la
+    // tabla `patients` acaba con variantes del mismo correo que no se
+    // reconocen entre sí ("Ing.luis@..." vs "ing.luis@...").
+    const email = formData.email.trim().toLowerCase();
+
+    // ¿Ya hay un registro con este correo? ilike para alcanzar también los
+    // registros anteriores a esta normalización.
     const { data: existingPatient } = await adminSupabase
       .from('patients')
       .select('id, user_id')
-      .eq('email', formData.email)
+      .ilike('email', email)
       .maybeSingle();
 
     if (existingPatient) {
@@ -45,7 +51,7 @@ export async function POST(request: Request) {
       // salta directo a la pantalla de verificación.
       const { error: resendError } = await anonSupabase.auth.resend({
         type: 'signup',
-        email: formData.email,
+        email,
       });
 
       if (resendError) {
@@ -53,7 +59,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             pendingVerification: true,
-            email: formData.email,
+            email,
             error: traducirErrorAuth(resendError.message),
           },
           { status: 429 }
@@ -62,7 +68,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         pendingVerification: true,
-        email: formData.email,
+        email,
         message: 'Ya tenías un registro sin confirmar. Te enviamos un código nuevo.',
       });
     }
@@ -71,7 +77,7 @@ export async function POST(request: Request) {
     // el correo de confirmación: admin.createUser crea al usuario en silencio.
     // El usuario queda sin confirmar en Auth hasta que valide el código.
     const { data: authData, error: authError } = await anonSupabase.auth.signUp({
-      email: formData.email,
+      email,
       password: formData.password,
       options: {
         data: {
@@ -106,7 +112,7 @@ export async function POST(request: Request) {
         {
           user_id: authData.user.id,
           full_name: formData.full_name,
-          email: formData.email,
+          email,
           phone: formData.phone,
           date_of_birth: formData.date_of_birth,
           gender: formData.gender,
