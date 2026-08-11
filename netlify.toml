@@ -1,0 +1,23 @@
+# Configuración de Netlify.
+#
+# Sólo se define el entorno de build: el comando y el directorio de publicación
+# siguen viniendo de la UI, para no pisarlos desde aquí.
+
+[build.environment]
+
+  # Netlify escanea la salida del build buscando el VALOR de cada variable de
+  # entorno y falla si lo encuentra. Con Next.js eso da falsos positivos
+  # garantizados: las NEXT_PUBLIC_* se incrustan en el bundle del navegador a
+  # propósito, y SMTP_FROM_NAME vale "CliniKB", que aparece en cada página.
+  #
+  # Aquí se eximen SÓLO las que son públicas por naturaleza. Los secretos de
+  # verdad —SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, SEND_EMAIL_HOOK_SECRET,
+  # STREAM_API_SECRET, DOCTOR_PORTAL_PASSWORD— se siguen escaneando: si alguno
+  # llegara a filtrarse al bundle, el build debe fallar.
+  # SUPABASE_OTP_EXPIRY_SECONDS vale "600": un número de tres dígitos que
+  # aparece por todo el bundle. Falso positivo asegurado.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,NEXT_PUBLIC_APP_URL,NEXT_PUBLIC_SITE_URL,NEXT_PUBLIC_STREAM_API_KEY,SMTP_FROM_NAME,SMTP_FROM_EMAIL,ADMIN_EMAIL,EMAIL_REPLY_TO,SUPABASE_OTP_EXPIRY_SECONDS"
+
+  # La caché de Turbopack guarda literales del código y dispara los mismos
+  # falsos positivos; no es contenido servido al usuario.
+  SECRETS_SCAN_OMIT_PATHS = ".next/cache/**,.netlify/.next/cache/**"
