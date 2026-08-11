@@ -14,10 +14,13 @@ export async function GET() {
       );
     }
 
+    // Se trae la estructura familiar en la misma consulta: son pocas filas por
+    // paciente y evita una petición por cada ficha que se abra.
     const { data, error } = await adminSupabase
       .from('patients')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*, family_members:patient_family_members(*)')
+      .order('created_at', { ascending: false })
+      .order('position', { referencedTable: 'patient_family_members', ascending: true });
 
     if (error) throw error;
 

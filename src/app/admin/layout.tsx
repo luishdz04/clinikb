@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Layout, Menu, Avatar, Dropdown, Button, Typography, Spin, theme, Drawer } from "antd";
 import {
-  DashboardOutlined,
   UserOutlined,
   LogoutOutlined,
   MenuOutlined,
@@ -25,12 +24,8 @@ const { Text } = Typography;
 
 // Función para generar items del menú según el rol
 const getMenuItems = (isAdmin: boolean): MenuProps["items"] => {
+  // "Dashboard" se quitó: mostraba lo mismo que Pacientes y ahora redirige ahí.
   const baseItems: MenuProps["items"] = [
-    {
-      key: "/admin/dashboard",
-      icon: <DashboardOutlined />,
-      label: "Dashboard",
-    },
     {
       key: "/admin/pacientes",
       icon: <TeamOutlined />,

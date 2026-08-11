@@ -37,7 +37,7 @@ export default function LoginDoctorPage() {
       localStorage.setItem("doctor", JSON.stringify(result.doctor));
 
       message.success(`¡Bienvenido Dr(a). ${result.doctor.full_name}!`);
-      router.push("/admin/dashboard");
+      router.push("/admin/pacientes");
     } catch {
       setError("No se pudo conectar. Intenta de nuevo.");
     } finally {
