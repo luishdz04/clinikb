@@ -55,3 +55,14 @@ ant.design*.txt
 
 # ajustes locales de Claude Code (por máquina, no compartibles)
 .claude/settings.local.json
+
+# skills de Stream: el CLI las instala en ~/.stream y deja symlinks con ruta
+# absoluta, así que fuera de esta máquina quedarían rotos. Se reinstalan con
+# `getstream skills --claude --universal`.
+# (las de Resend sí se commitean: apuntan dentro del repo con ruta relativa)
+.agents/skills/stream
+.agents/skills/stream-builder
+.agents/skills/stream-docs
+.claude/skills/stream
+.claude/skills/stream-builder
+.claude/skills/stream-docs
