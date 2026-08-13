@@ -79,26 +79,69 @@
 }
 
 /*
- * Panel de dispositivos. El del SDK viene en inglés y con las filas muy
- * apretadas; esto sólo mejora legibilidad y separación, sin reemplazar el
- * componente.
+ * Panel de dispositivos, con la identidad de la clínica.
+ *
+ * Sobre el turquesa principal (#55c5c4) el texto blanco da 2.06:1 y no cumple
+ * WCAG AA — lo advierte el propio src/theme/themeConfig.ts. Por eso la
+ * superficie usa el turquesa profundo (#2b6068), que con blanco da 7.06:1, y
+ * el turquesa claro se reserva para marcar la opción elegida.
  */
-.str-video__device-settings {
-  padding: 4px;
+.str-video__device-settings,
+.str-video__menu-container {
+  background: #2b6068;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.str-video__device-settings *,
+.str-video__menu-container * {
+  color: #ffffff;
+}
+
+/* Encabezados de cada grupo: en blanco atenuado para que no compitan. */
+.str-video__device-settings__device-kind > *:first-child {
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .str-video__device-settings__device-kind {
   margin-bottom: 12px;
 }
 
-/* Que se note cuál está seleccionado sin teñir las demás filas. */
+/* Filas: apenas separadas del fondo, sin competir entre sí. */
 .str-video__device-settings .str-video__option {
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  transition: background-color 0.15s;
 }
 
 .str-video__device-settings .str-video__option:hover {
-  background-color: rgba(85, 197, 196, 0.12);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/*
+ * La elegida sí lleva el turquesa claro, y ahí el texto pasa a tinta oscura:
+ * es el único par que mantiene el contraste sobre ese fondo.
+ */
+.str-video__device-settings .str-video__option:has(input:checked) {
+  background: #55c5c4;
+}
+
+.str-video__device-settings .str-video__option:has(input:checked),
+.str-video__device-settings .str-video__option:has(input:checked) * {
+  color: #060807;
+  font-weight: 600;
+}
+
+/* Separadores y barra de nivel del micrófono. */
+.str-video__device-settings hr,
+.str-video__device-settings__device-kind + .str-video__device-settings__device-kind {
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 /*
