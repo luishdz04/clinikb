@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { COOKIE_SESION_DOCTOR, verificarSesionDoctor } from "@/lib/auth/doctorSession";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = createAdminClient();
     if (!supabase) {
@@ -11,8 +13,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const doctorId = searchParams.get("doctor_id");
+    // El doctor sale de la sesión, no de la query. Antes, sin `doctor_id` en
+    // la URL, la ruta devolvía las citas de TODOS los doctores: los datos de
+    // pacientes ajenos quedaban a la vista de cualquier miembro del personal.
+    const galletas = await cookies();
+    const sesion = await verificarSesionDoctor(galletas.get(COOKIE_SESION_DOCTOR)?.value);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+    const doctorId = sesion.id;
 
     // Construir query base
     let query = supabase
@@ -25,10 +34,7 @@ export async function GET(request: NextRequest) {
       .order("appointment_date", { ascending: false })
       .order("start_time", { ascending: false });
 
-    // Filtrar por doctor si se proporciona
-    if (doctorId) {
-      query = query.eq("doctor_id", doctorId);
-    }
+    query = query.eq("doctor_id", doctorId);
 
     const { data: appointments, error } = await query;
 
