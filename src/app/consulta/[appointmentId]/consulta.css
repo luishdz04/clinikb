@@ -1,0 +1,68 @@
+/*
+ * Ajustes del SDK de Stream a la marca CliniKB.
+ *
+ * Se importa DESPUÉS de la hoja del SDK para poder ganarle. Todo cuelga de
+ * `.str-video`, la clase que aplica <StreamTheme>, así que nada de esto se
+ * escapa al resto de la aplicación.
+ *
+ * Los colores están escritos a mano y no salen de los tokens de antd porque
+ * esto es CSS estático: los tokens sólo existen en JavaScript. Deben coincidir
+ * con src/theme/themeConfig.ts.
+ */
+
+.str-video {
+  /* Acento principal: marca los bordes de quien habla, el dispositivo
+     seleccionado y los estados activos. Por defecto es el azul #005fff. */
+  --str-video__primary-color: #55c5c4;
+  --str-video__brand-color1: #55c5c4;
+  --str-video__brand-color2: #367c84;
+
+  /* Botones de la barra de llamada. */
+  --str-video__button-primary-base: #55c5c4;
+  --str-video__button-primary-hover: #367c84;
+  --str-video__button-primary-active: #55c5c4;
+  --str-video__button-primary-pressed: #2b6068;
+
+  /* Colgar sigue en rojo a propósito: es la acción destructiva y conviene que
+     no se confunda con el resto. */
+}
+
+/*
+ * El video no llenaba su contenedor y quedaba una franja negra al lado.
+ * `participant-view` trae un max-width de 1280px y una proporción propia; en
+ * una consulta a dos siempre queremos que ocupe todo el espacio disponible.
+ * Es el mismo ajuste que documenta la guía de Stream para video a sangre.
+ */
+.str-video__speaker-layout__spotlight .str-video__participant-view {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border-radius: 0;
+}
+
+.str-video__speaker-layout__spotlight .str-video__participant-view video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+/*
+ * Vista previa del lobby: proporción fija para que el recuadro no cambie de
+ * tamaño según la cámara, y la imagen recortada en vez de dejar franjas.
+ */
+.consulta-preview {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: #000;
+  overflow: hidden;
+  position: relative;
+}
+
+.consulta-preview .str-video__video-preview,
+.consulta-preview .str-video__video-preview-container,
+.consulta-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

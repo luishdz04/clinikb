@@ -14,6 +14,8 @@ import {
   type Call,
 } from "@stream-io/video-react-sdk";
 import "@stream-io/video-react-sdk/dist/css/styles.css";
+// Después de la del SDK a propósito: estos ajustes tienen que ganarle.
+import "./consulta.css";
 
 /**
  * Contexto de una consulta en línea.

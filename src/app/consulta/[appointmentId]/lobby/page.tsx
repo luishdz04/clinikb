@@ -76,7 +76,7 @@ function ContenidoLobby({ alEntrar }: { alEntrar: () => void }) {
 
   return (
     <Flex vertical gap={token.margin}>
-      <div style={{ borderRadius: token.borderRadiusLG, overflow: "hidden", background: "#000" }}>
+      <div className="consulta-preview" style={{ borderRadius: token.borderRadiusLG }}>
         <VideoPreview />
       </div>
 
