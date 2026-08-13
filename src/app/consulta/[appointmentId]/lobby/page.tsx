@@ -28,18 +28,42 @@ const { Title, Paragraph, Text } = Typography;
  * que es lo que permite distinguir "el navegador está preguntando" de "el
  * usuario dijo que no" — importante porque el navegador sólo pregunta una vez.
  */
+/**
+ * El navegador devuelve un DOMException con distintos nombres según el motivo,
+ * y cada uno se resuelve distinto. Un mensaje genérico deja a la persona sin
+ * saber qué hacer.
+ */
+function explicarFalloDeMedios(error: unknown): string {
+  const nombre = (error as { name?: string })?.name ?? "";
+  switch (nombre) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Bloqueaste el acceso a la cámara o el micrófono. Abre el candado junto a la dirección del sitio, permítelos y recarga la página: el navegador sólo pregunta una vez.";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "No se encontró cámara o micrófono en este dispositivo. Conecta uno y recarga la página.";
+    case "NotReadableError":
+    case "AbortError":
+      return "Otra aplicación está usando tu cámara o micrófono. Ciérrala y recarga la página.";
+    default:
+      return "No se pudo acceder a tu cámara o micrófono. Revisa los permisos del navegador y recarga la página.";
+  }
+}
+
 function ContenidoLobby({ alEntrar }: { alEntrar: () => void }) {
   const { token } = theme.useToken();
   const { useCameraState, useMicrophoneState } = useCallStateHooks();
 
   const camara = useCameraState();
   const microfono = useMicrophoneState();
+  const [falloMedios, setFalloMedios] = useState<string | null>(null);
 
   // Se enciende la vista previa al montar y se apaga al salir, para no dejar
-  // la cámara prendida si la persona se arrepiente.
+  // la cámara prendida si la persona se arrepiente. Cada dispositivo va en su
+  // propio catch: que falle el micrófono no debe impedir ver la cámara.
   useEffect(() => {
-    camara.camera.enable().catch(() => {});
-    microfono.microphone.enable().catch(() => {});
+    camara.camera.enable().catch((e: unknown) => setFalloMedios(explicarFalloDeMedios(e)));
+    microfono.microphone.enable().catch((e: unknown) => setFalloMedios(explicarFalloDeMedios(e)));
     return () => {
       camara.camera.disable().catch(() => {});
       microfono.microphone.disable().catch(() => {});
@@ -49,8 +73,6 @@ function ContenidoLobby({ alEntrar }: { alEntrar: () => void }) {
   }, []);
 
   const permisoPendiente = camara.isPromptingPermission || microfono.isPromptingPermission;
-  const permisoNegado =
-    camara.hasBrowserPermission === false || microfono.hasBrowserPermission === false;
 
   return (
     <Flex vertical gap={token.margin}>
@@ -67,13 +89,8 @@ function ContenidoLobby({ alEntrar }: { alEntrar: () => void }) {
         />
       )}
 
-      {permisoNegado && (
-        <Alert
-          type="error"
-          showIcon
-          title="Permiso denegado"
-          description="El navegador sólo pregunta una vez. Para habilitarlo, abre el candado junto a la dirección del sitio, permite cámara y micrófono, y recarga la página."
-        />
+      {falloMedios && (
+        <Alert type="error" showIcon title="No podemos usar tu cámara o micrófono" description={falloMedios} />
       )}
 
       <Flex justify="space-between" align="center" gap={token.margin} wrap>
@@ -96,15 +113,15 @@ function ContenidoLobby({ alEntrar }: { alEntrar: () => void }) {
         <DeviceSettings />
       </Flex>
 
-      <Button
-        type="primary"
-        size="large"
-        block
-        onClick={alEntrar}
-        disabled={permisoNegado}
-      >
+      <Button type="primary" size="large" block onClick={alEntrar} disabled={Boolean(falloMedios)}>
         Entrar a la consulta
       </Button>
+
+      {falloMedios && (
+        <Button type="link" block onClick={() => window.location.reload()}>
+          Ya lo permití, recargar
+        </Button>
+      )}
     </Flex>
   );
 }
