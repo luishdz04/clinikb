@@ -63,6 +63,8 @@ ant.design*.txt
 .agents/skills/stream
 .agents/skills/stream-builder
 .agents/skills/stream-docs
+.agents/skills/stream-react
 .claude/skills/stream
 .claude/skills/stream-builder
 .claude/skills/stream-docs
+.claude/skills/stream-react
