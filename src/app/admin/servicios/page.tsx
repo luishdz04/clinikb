@@ -114,24 +114,25 @@ export default function ServiciosPage() {
   const activos = services.filter((s) => s.active);
   const sinDoctor = activos.filter((s) => (s.doctor_count ?? 0) === 0);
 
+  // Los valores van por initialValues y no con setFieldsValue: al abrir, el
+  // <Form> todavía no está montado y antd avisa que la instancia de useForm no
+  // está conectada. El modal se destruye al cerrarse, así que remonta limpio.
+  const valoresIniciales = editando
+    ? { ...editando, available_modalities: editando.available_modalities ?? [] }
+    : {
+        category: CATEGORIAS[0],
+        duration_minutes: 60,
+        available_modalities: ["online", "presencial"],
+        active: true,
+      };
+
   const abrirNuevo = () => {
     setEditando(null);
-    form.resetFields();
-    form.setFieldsValue({
-      category: CATEGORIAS[0],
-      duration_minutes: 60,
-      available_modalities: ["online", "presencial"],
-      active: true,
-    });
     setModalAbierto(true);
   };
 
   const abrirEdicion = (service: Service) => {
     setEditando(service);
-    form.setFieldsValue({
-      ...service,
-      available_modalities: service.available_modalities ?? [],
-    });
     setModalAbierto(true);
   };
 
@@ -417,7 +418,12 @@ export default function ServiciosPage() {
         width={620}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" style={{ marginTop: token.margin }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={valoresIniciales}
+          style={{ marginTop: token.margin }}
+        >
           <Form.Item
             label="Título"
             name="title"

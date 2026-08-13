@@ -240,7 +240,6 @@ export default function CitasPacientePage() {
     setDia(dayjs());
     setMes(dayjs());
     setCargandoSlots(true);
-    formSolicitud.resetFields();
     setModalAgendar(true);
   };
 
@@ -446,6 +445,10 @@ export default function CitasPacientePage() {
         open={modalAgendar}
         onCancel={() => setModalAgendar(false)}
         width={820}
+        // Al cerrarse destruye su contenido, así el formulario nace limpio la
+        // próxima vez. Antes se llamaba resetFields() antes de que el <Form>
+        // existiera, y antd avisaba que la instancia no estaba conectada.
+        destroyOnHidden
         footer={
           modo === "calendario"
             ? [

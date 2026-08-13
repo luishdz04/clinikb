@@ -249,20 +249,19 @@ export default function HorariosPage() {
     return { dias, porDia, total: dias * porDia };
   }, [loteRango, loteDias, loteFranja, loteBloque]);
 
-  const abrirLote = () => {
-    formLote.resetFields();
-    const servicioPorDefecto = servicios[0];
-    formLote.setFieldsValue({
-      serviceId: servicioPorDefecto?.id,
-      rango: [diaElegido, diaElegido.add(2, "week")],
-      weekdays: [1, 2, 3, 4, 5],
-      franja: [dayjs("09:00", "HH:mm"), dayjs("14:00", "HH:mm")],
-      blockMinutes: servicioPorDefecto?.duration_minutes ?? 60,
-      maxAppointments: 1,
-      modality: "online",
-    });
-    setModalLote(true);
+  // Por initialValues, no con setFieldsValue antes de abrir: en ese momento el
+  // <Form> no está montado y antd avisa que la instancia no está conectada.
+  const valoresLote = {
+    serviceId: servicios[0]?.id,
+    rango: [diaElegido, diaElegido.add(2, "week")],
+    weekdays: [1, 2, 3, 4, 5],
+    franja: [dayjs("09:00", "HH:mm"), dayjs("14:00", "HH:mm")],
+    blockMinutes: servicios[0]?.duration_minutes ?? 60,
+    maxAppointments: 1,
+    modality: "online",
   };
+
+  const abrirLote = () => setModalLote(true);
 
   const generarLote = async () => {
     let values;
@@ -306,29 +305,33 @@ export default function HorariosPage() {
     }
   };
 
+  const [fechaSugerida, setFechaSugerida] = useState<Dayjs | null>(null);
+
+  const valoresHorario = editando
+    ? {
+        serviceId: editando.service_id,
+        slotDate: leerFecha(editando.slot_date),
+        timeRange: [leerHora(editando.start_time), leerHora(editando.end_time)],
+        maxAppointments: editando.max_appointments,
+        modality: editando.modality ?? "online",
+        isAvailable: editando.is_available,
+        notes: editando.notes ?? undefined,
+      }
+    : {
+        slotDate: fechaSugerida ?? diaElegido,
+        maxAppointments: 1,
+        modality: "online",
+        isAvailable: true,
+      };
+
   const abrirNuevo = (fecha?: Dayjs) => {
     setEditando(null);
-    form.resetFields();
-    form.setFieldsValue({
-      slotDate: fecha ?? diaElegido,
-      maxAppointments: 1,
-      modality: "online",
-      isAvailable: true,
-    });
+    setFechaSugerida(fecha ?? diaElegido);
     setModalAbierto(true);
   };
 
   const abrirEdicion = (slot: AvailabilitySlot) => {
     setEditando(slot);
-    form.setFieldsValue({
-      serviceId: slot.service_id,
-      slotDate: leerFecha(slot.slot_date),
-      timeRange: [leerHora(slot.start_time), leerHora(slot.end_time)],
-      maxAppointments: slot.max_appointments,
-      modality: slot.modality ?? "online",
-      isAvailable: slot.is_available,
-      notes: slot.notes ?? undefined,
-    });
     setModalAbierto(true);
   };
 
@@ -734,7 +737,12 @@ export default function HorariosPage() {
         width={560}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" style={{ marginTop: token.margin }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={valoresHorario}
+          style={{ marginTop: token.margin }}
+        >
           <Form.Item
             label="Servicio"
             name="serviceId"
@@ -830,7 +838,7 @@ export default function HorariosPage() {
           horarios que ya tengas se omiten, no se sobrescriben.
         </Paragraph>
 
-        <Form form={formLote} layout="vertical">
+        <Form form={formLote} layout="vertical" initialValues={valoresLote}>
           <Form.Item
             label="Servicio"
             name="serviceId"

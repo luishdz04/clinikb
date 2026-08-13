@@ -230,20 +230,23 @@ export default function HistorialPage() {
     leerFecha(e.visit_date)?.isSame(dayjs(), "month"),
   ).length;
 
+  // Igual que en las otras pantallas: por initialValues, no con setFieldsValue
+  // antes de que el <Form> exista.
+  const valoresIniciales = editando
+    ? {
+        ...editando,
+        visit_date: leerFecha(editando.visit_date),
+        next_visit_date: leerFecha(editando.next_visit_date),
+      }
+    : { visit_date: dayjs() };
+
   const abrirNuevo = () => {
     setEditando(null);
-    form.resetFields();
-    form.setFieldsValue({ visit_date: dayjs() });
     setModalForm(true);
   };
 
   const abrirEdicion = (e: Expediente) => {
     setEditando(e);
-    form.setFieldsValue({
-      ...e,
-      visit_date: leerFecha(e.visit_date),
-      next_visit_date: leerFecha(e.next_visit_date),
-    });
     setModalForm(true);
   };
 
@@ -561,7 +564,7 @@ export default function HistorialPage() {
         width={860}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" initialValues={valoresIniciales}>
           <Row gutter={token.margin}>
             <Col xs={24} md={12}>
               <Form.Item

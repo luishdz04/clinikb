@@ -174,18 +174,11 @@ export default function CitasPage() {
     });
   }, [citas, busqueda, filtroEstado, filtroFecha]);
 
+  // No se tocan los formularios aquí: cuando esto corre, el <Form> todavía no
+  // está montado y antd avisa que la instancia de useForm no está conectada.
+  // Cada modal se destruye al cerrarse y recibe sus valores por initialValues.
   const abrirAccion = (cita: Cita, accion: Accion) => {
     setSeleccionada(cita);
-    formRechazo.resetFields();
-    formCancelacion.resetFields();
-    formReagenda.resetFields();
-    formNotas.setFieldsValue({ notes: cita.doctor_notes ?? "" });
-    if (accion === "reagendar") {
-      formReagenda.setFieldsValue({
-        fecha: leerFecha(cita.appointment_date),
-        hora: leerHora(cita.start_time),
-      });
-    }
     setAccionAbierta(accion);
   };
 
@@ -566,6 +559,7 @@ export default function CitasPage() {
         okText="Rechazar"
         cancelText="Cancelar"
         okButtonProps={{ danger: true, loading: procesando }}
+        destroyOnHidden
         onOk={async () => {
           const v = await formRechazo.validateFields().catch(() => null);
           if (!v || !seleccionada) return;
@@ -596,6 +590,7 @@ export default function CitasPage() {
         okText="Reagendar y confirmar"
         cancelText="Cancelar"
         okButtonProps={{ loading: procesando }}
+        destroyOnHidden
         onOk={async () => {
           const v = await formReagenda.validateFields().catch(() => null);
           if (!v || !seleccionada) return;
@@ -613,7 +608,14 @@ export default function CitasPage() {
         <Paragraph type="secondary">
           La cita queda confirmada en el nuevo horario y el paciente recibe el aviso.
         </Paragraph>
-        <Form form={formReagenda} layout="vertical">
+        <Form
+          form={formReagenda}
+          layout="vertical"
+          initialValues={{
+            fecha: seleccionada ? leerFecha(seleccionada.appointment_date) : undefined,
+            hora: seleccionada ? leerHora(seleccionada.start_time) : undefined,
+          }}
+        >
           <Row gutter={token.margin}>
             <Col xs={24} sm={12}>
               <Form.Item label="Nueva fecha" name="fecha" rules={[{ required: true, message: "Elige la fecha" }]}>
@@ -637,6 +639,7 @@ export default function CitasPage() {
         okText="Cancelar la cita"
         cancelText="Volver"
         okButtonProps={{ danger: true, loading: procesando }}
+        destroyOnHidden
         onOk={async () => {
           const v = await formCancelacion.validateFields().catch(() => null);
           if (!v || !seleccionada) return;
@@ -689,6 +692,7 @@ export default function CitasPage() {
         okText="Guardar"
         cancelText="Cancelar"
         okButtonProps={{ loading: procesando }}
+        destroyOnHidden
         onOk={async () => {
           const v = await formNotas.validateFields().catch(() => null);
           if (!v || !seleccionada) return;
@@ -700,7 +704,11 @@ export default function CitasPage() {
         }}
       >
         <Paragraph type="secondary">Sólo tú las ves. El paciente no recibe estas notas.</Paragraph>
-        <Form form={formNotas} layout="vertical">
+        <Form
+          form={formNotas}
+          layout="vertical"
+          initialValues={{ notes: seleccionada?.doctor_notes ?? "" }}
+        >
           <Form.Item label="Notas" name="notes">
             <TextArea rows={5} maxLength={2000} showCount />
           </Form.Item>
