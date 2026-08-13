@@ -538,7 +538,7 @@ export default function CitasPage() {
                   onClick={() => {
                     const url = new URL(record.meeting_link!);
                     const roomId = url.searchParams.get('room');
-                    window.open(`/consulta/${record.id}/lobby?room=${roomId}&admin=true`, '_blank');
+                    window.open(`/consulta/${record.id}/lobby`, '_blank');
                   }}
                   size="small"
                   className="text-green-600"

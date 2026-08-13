@@ -383,7 +383,7 @@ export default function MisCitasPage() {
               onClick={() => {
                 const url = new URL(record.meeting_link!);
                 const roomId = url.searchParams.get('room');
-                window.location.href = `/consulta/${record.id}/lobby?room=${roomId}`;
+                window.location.href = `/consulta/${record.id}/lobby`;
               }}
               style={{ backgroundColor: "#52c41a" }}
             >
@@ -513,7 +513,7 @@ export default function MisCitasPage() {
               onClick={() => {
                 const url = new URL(selectedAppointment.meeting_link!);
                 const roomId = url.searchParams.get('room');
-                window.location.href = `/consulta/${selectedAppointment.id}/lobby?room=${roomId}`;
+                window.location.href = `/consulta/${selectedAppointment.id}/lobby`;
               }}
               style={{ backgroundColor: "#52c41a" }}
             >
