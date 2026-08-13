@@ -34,8 +34,11 @@ export const updateSession = async (request: NextRequest) => {
     }
   );
 
-  // Refresh session if needed
-  await supabase.auth.getUser();
+  // Refresh session if needed. Se devuelve también el usuario para que el
+  // middleware pueda decidir sin volver a pedirlo.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  return supabaseResponse;
+  return { supabaseResponse, user };
 };

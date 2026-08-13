@@ -77,7 +77,18 @@ export async function POST(request: Request) {
     }
 
     // Preparar datos de la cita
-    const appointmentData: any = {
+    const appointmentData: {
+      patient_id: string;
+      service_id: string;
+      doctor_id: string;
+      modality: string;
+      status: string;
+      patient_notes: string | null;
+      slot_id: null;
+      appointment_date?: string;
+      start_time?: string;
+      end_time?: string;
+    } = {
       patient_id: patient.id,
       service_id,
       doctor_id: doctorService.doctor_id,

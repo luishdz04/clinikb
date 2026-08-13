@@ -69,16 +69,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Crear la cita con status "pending" - requiere confirmación del doctor
+    // La cita se arma con los datos del SLOT, no con los del cuerpo. Antes se
+    // insertaban la fecha, la hora y el doctor que mandaba el cliente aunque
+    // el slot ya los definía: bastaba enviar otros valores para reservar en un
+    // horario que el doctor nunca abrió, o a nombre de otro doctor.
+    if (slot.service_id !== service_id) {
+      return NextResponse.json(
+        { error: "Ese horario no corresponde al servicio elegido" },
+        { status: 400 }
+      );
+    }
+
     const { data: appointment, error: appointmentError } = await supabase
       .from("appointments")
       .insert({
         patient_id: patient.id,
-        service_id,
-        doctor_id,
-        appointment_date,
-        start_time,
-        end_time,
+        service_id: slot.service_id,
+        doctor_id: slot.doctor_id,
+        appointment_date: slot.slot_date,
+        start_time: slot.start_time,
+        end_time: slot.end_time,
         slot_id: slot_id,
         status: "pending",
         patient_notes: patient_notes || null,

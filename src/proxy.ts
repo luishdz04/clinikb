@@ -52,7 +52,16 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  return await updateSession(request);
+  // Refresca la sesión de Supabase (pacientes) y de paso la deja disponible.
+  const { supabaseResponse, user } = await updateSession(request);
+
+  // El portal del paciente se protegía sólo en el cliente: la página se
+  // servía igual y el redirect ocurría después de montar. Aquí no llega.
+  if (pathname.startsWith("/cliente") && !user) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  return supabaseResponse;
 }
 
 export const config = {

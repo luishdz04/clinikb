@@ -20,6 +20,19 @@ export async function GET(
       );
     }
 
+    // Tener sesión no basta: hay que comprobar que la cita sea de quien
+    // pregunta. Antes se filtraba sólo por id, así que cualquier paciente
+    // podía leer la cita de otro con sólo cambiar el identificador de la URL.
+    const { data: paciente } = await supabase
+      .from("patients")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!paciente) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+
     const { data: appointment, error } = await supabase
       .from("appointments")
       .select(`
@@ -34,6 +47,7 @@ export async function GET(
         patient:patients(full_name)
       `)
       .eq("id", appointmentId)
+      .eq("patient_id", paciente.id)
       .single();
 
     if (error) {
