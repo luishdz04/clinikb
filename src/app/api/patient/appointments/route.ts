@@ -42,6 +42,10 @@ export async function GET() {
           title,
           category,
           duration_minutes
+        ),
+        doctor:doctors!appointments_doctor_id_fkey (
+          full_name,
+          specialty
         )
       `)
       .eq("patient_id", patient.id)

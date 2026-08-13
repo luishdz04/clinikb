@@ -1,252 +1,295 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Typography, Card, Row, Col, Alert, Spin, Descriptions, Tag } from "antd";
-import { UserOutlined, PhoneOutlined, MailOutlined, CalendarOutlined, MedicineBoxOutlined } from "@ant-design/icons";
-import { createClient } from "@/lib/supabase/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  Flex,
+  Result,
+  Row,
+  Space,
+  Statistic,
+  Tag,
+  Typography,
+  theme,
+} from "antd";
+import {
+  CalendarOutlined,
+  PlusOutlined,
+  VideoCameraOutlined,
+} from "@ant-design/icons";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/es";
+import Link from "next/link";
+import { calcularEdad } from "@/types/patient";
 
-dayjs.extend(utc);
+dayjs.extend(customParseFormat);
 dayjs.locale("es");
 
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 
-interface PatientData {
-  id: string;
+const FORMATO_FECHA = "YYYY-MM-DD";
+const FORMATO_HORA = "HH:mm:ss";
+
+/** Columnas `date` y `time` sin zona: se leen tal cual, sin convertir. */
+const leerFecha = (v?: string | null) => (v ? dayjs(v, FORMATO_FECHA) : null);
+const leerHora = (v?: string | null) => (v ? dayjs(v, FORMATO_HORA) : null);
+
+const ESTADOS: Record<string, { texto: string; color: string }> = {
+  pending: { texto: "Por confirmar", color: "warning" },
+  confirmed: { texto: "Confirmada", color: "success" },
+  completed: { texto: "Completada", color: "processing" },
+  rejected: { texto: "Rechazada", color: "error" },
+  cancelled: { texto: "Cancelada", color: "default" },
+  no_show: { texto: "No asistió", color: "error" },
+};
+
+interface Paciente {
   full_name: string;
   email: string;
   phone: string;
   date_of_birth: string;
-  gender?: string;
+  gender?: string | null;
+  city?: string | null;
+  state?: string | null;
   attention_type: string;
-  status: string;
-  city?: string;
-  state?: string;
 }
 
-export default function ClienteDashboard() {
-  const [loading, setLoading] = useState(true);
-  const [patient, setPatient] = useState<PatientData | null>(null);
-  const supabase = createClient();
+interface Cita {
+  id: string;
+  appointment_date: string;
+  start_time: string;
+  status: string;
+  modality?: string | null;
+  service?: { title?: string } | null;
+  doctor?: { full_name?: string } | null;
+}
+
+async function obtenerDatos(): Promise<{ paciente: Paciente; citas: Cita[] }> {
+  const [resMe, resCitas] = await Promise.all([
+    fetch("/api/patient/me"),
+    fetch("/api/patient/appointments"),
+  ]);
+  const jsonMe = await resMe.json();
+  const jsonCitas = await resCitas.json();
+
+  if (!resMe.ok) throw new Error(jsonMe.error || "No se pudo cargar tu perfil");
+
+  return {
+    paciente: jsonMe.patient,
+    // Las citas no son críticas para pintar la pantalla: si fallan, se muestra
+    // el resto en vez de dejar al paciente sin nada.
+    citas: resCitas.ok ? (jsonCitas.appointments ?? []) : [],
+  };
+}
+
+export default function DashboardPacientePage() {
+  const { token } = theme.useToken();
+  const [paciente, setPaciente] = useState<Paciente | null>(null);
+  const [citas, setCitas] = useState<Cita[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const cargar = useCallback(
+    (vivo: () => boolean) =>
+      obtenerDatos()
+        .then(({ paciente: p, citas: c }) => {
+          if (!vivo()) return;
+          setPaciente(p);
+          setCitas(c);
+        })
+        .catch((e: unknown) => {
+          if (vivo()) setError(e instanceof Error ? e.message : "Error al cargar");
+        })
+        .finally(() => {
+          if (vivo()) setCargando(false);
+        }),
+    [],
+  );
 
   useEffect(() => {
-    fetchPatientData();
-  }, []);
+    let vivo = true;
+    cargar(() => vivo);
+    return () => {
+      vivo = false;
+    };
+  }, [cargar]);
 
-  const fetchPatientData = async () => {
-    try {
-      setLoading(true);
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  /** La siguiente cita que aún no pasó, que es lo que el paciente viene a ver. */
+  const proxima = useMemo(() => {
+    const ahora = dayjs();
+    return citas
+      .filter((c) => ["pending", "confirmed"].includes(c.status))
+      .filter((c) => {
+        const f = leerFecha(c.appointment_date);
+        return f ? !f.isBefore(ahora, "day") : false;
+      })
+      .sort((a, b) =>
+        `${a.appointment_date}${a.start_time}`.localeCompare(`${b.appointment_date}${b.start_time}`),
+      )[0];
+  }, [citas]);
 
-      if (!user) {
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("patients")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-
-      if (error) throw error;
-
-      setPatient(data);
-    } catch (error) {
-      console.error("Error fetching patient data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Spin size="large" />
-      </div>
-    );
-  }
-
-  if (!patient) {
-    return (
-      <Alert
-        title="Error"
-        description="No se pudieron cargar tus datos"
-        type="error"
-        showIcon
+      <Result
+        status="warning"
+        title="No se pudieron cargar tus datos"
+        subTitle={error}
+        extra={
+          <Button type="primary" onClick={() => window.location.reload()}>
+            Reintentar
+          </Button>
+        }
       />
     );
   }
 
-  const age = patient.date_of_birth
-    ? dayjs().diff(dayjs.utc(patient.date_of_birth), "year")
-    : null;
+  const edad = calcularEdad(paciente?.date_of_birth);
 
   return (
-    <div>
-      <Title level={2} className="!text-[#55c5c4] !mb-6">
-        Bienvenido, {patient.full_name}
-      </Title>
+    <Flex vertical gap={token.marginLG}>
+      <div>
+        <Title level={2} style={{ marginTop: 0, marginBottom: token.marginXXS }}>
+          Hola{paciente ? `, ${paciente.full_name.trim().split(" ")[0]}` : ""}
+        </Title>
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Aquí ves tu próxima cita y puedes agendar una nueva.
+        </Paragraph>
+      </div>
 
-      <Alert
-        title="¡Cuenta Aprobada!"
-        description="Tu cuenta ha sido aprobada. Ahora puedes acceder a todos los servicios de CliniKB."
-        type="success"
-        showIcon
-        className="mb-6"
-      />
-
-      <Row gutter={[16, 16]}>
-        {/* Información Personal */}
-        <Col xs={24} lg={12}>
+      <Row gutter={[token.margin, token.margin]}>
+        <Col xs={24} lg={14}>
           <Card
-            title={
-              <span>
-                <UserOutlined className="mr-2" />
-                Información Personal
-              </span>
+            title="Tu próxima cita"
+            loading={cargando}
+            extra={
+              <Link href="/cliente/citas">
+                <Button type="link">Ver todas</Button>
+              </Link>
             }
-            className="h-full"
           >
-            <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label="Nombre Completo">
-                {patient.full_name}
-              </Descriptions.Item>
-              <Descriptions.Item label="Fecha de Nacimiento">
-                {dayjs.utc(patient.date_of_birth).format("DD/MM/YYYY")}
-                {age && ` (${age} años)`}
-              </Descriptions.Item>
-              {patient.gender && (
-                <Descriptions.Item label="Género">
-                  {patient.gender}
-                </Descriptions.Item>
-              )}
-              {patient.city && patient.state && (
-                <Descriptions.Item label="Ubicación">
-                  {patient.city}, {patient.state}
-                </Descriptions.Item>
-              )}
-            </Descriptions>
+            {proxima ? (
+              <Flex vertical gap={token.margin}>
+                <Flex justify="space-between" align="flex-start" gap={token.margin} wrap>
+                  <Flex vertical gap={token.marginXXS}>
+                    <Text strong style={{ fontSize: token.fontSizeLG }}>
+                      {leerFecha(proxima.appointment_date)?.format("dddd D [de] MMMM")}
+                    </Text>
+                    <Text type="secondary">
+                      {leerHora(proxima.start_time)?.format("HH:mm")} h ·{" "}
+                      {proxima.service?.title ?? "Consulta"}
+                    </Text>
+                    {proxima.doctor?.full_name && (
+                      <Text type="secondary">Te atiende {proxima.doctor.full_name}</Text>
+                    )}
+                  </Flex>
+                  <Space direction="vertical" align="end">
+                    <Tag color={ESTADOS[proxima.status]?.color}>
+                      {ESTADOS[proxima.status]?.texto ?? proxima.status}
+                    </Tag>
+                    {proxima.modality && (
+                      <Tag color={proxima.modality === "online" ? "blue" : "green"}>
+                        {proxima.modality === "online" ? "En línea" : "Presencial"}
+                      </Tag>
+                    )}
+                  </Space>
+                </Flex>
+
+                {proxima.status === "pending" && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    title="Falta que la confirmen"
+                    description="Te avisaremos por correo en cuanto tu cita quede confirmada."
+                  />
+                )}
+
+                {proxima.status === "confirmed" && proxima.modality === "online" && (
+                  <Link href={`/consulta/${proxima.id}/lobby`}>
+                    <Button type="primary" icon={<VideoCameraOutlined />} size="large" block>
+                      Entrar a la consulta
+                    </Button>
+                  </Link>
+                )}
+              </Flex>
+            ) : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="No tienes citas próximas"
+              >
+                <Link href="/cliente/citas">
+                  <Button type="primary" icon={<PlusOutlined />}>
+                    Agendar una cita
+                  </Button>
+                </Link>
+              </Empty>
+            )}
           </Card>
         </Col>
 
-        {/* Información de Contacto */}
-        <Col xs={24} lg={12}>
-          <Card
-            title={
-              <span>
-                <PhoneOutlined className="mr-2" />
-                Información de Contacto
-              </span>
-            }
-            className="h-full"
-          >
-            <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label={<span><MailOutlined className="mr-1" />Email</span>}>
-                <a href={`mailto:${patient.email}`} className="text-[#55c5c4]">
-                  {patient.email}
-                </a>
-              </Descriptions.Item>
-              <Descriptions.Item label={<span><PhoneOutlined className="mr-1" />Teléfono</span>}>
-                <a href={`tel:${patient.phone}`} className="text-[#55c5c4]">
-                  {patient.phone}
-                </a>
-              </Descriptions.Item>
-              <Descriptions.Item label={<span><PhoneOutlined className="mr-1" />WhatsApp</span>}>
-                <a
-                  href={`https://wa.me/${patient.phone?.replace(/\D/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#55c5c4]"
-                >
-                  Enviar mensaje
-                </a>
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-        </Col>
-
-        {/* Tipo de Atención */}
-        <Col xs={24}>
-          <Card
-            title={
-              <span>
-                <MedicineBoxOutlined className="mr-2" />
-                Mi Plan de Atención
-              </span>
-            }
-          >
-            <Descriptions column={1} bordered size="middle">
-              <Descriptions.Item label="Tipo de Atención">
-                <Tag
-                  color={patient.attention_type === "Psicológica" ? "blue" : "green"}
-                  className="text-base px-3 py-1"
-                >
-                  {patient.attention_type}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="Especialista Asignado">
-                {patient.attention_type === "Psicológica"
-                  ? "Dra. Cynthia Kristell de Luna Hernández"
-                  : "Dr. Baldo Daniel Martínez González"}
-              </Descriptions.Item>
-              <Descriptions.Item label="Estado de Cuenta">
-                <Tag color="success" icon={<CalendarOutlined />}>
-                  Activa
-                </Tag>
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
+        <Col xs={24} lg={10}>
+          <Flex vertical gap={token.margin}>
+            <Card loading={cargando}>
+              <Statistic
+                title="Citas registradas"
+                value={citas.length}
+                prefix={<CalendarOutlined />}
+                styles={{ content: { color: token.colorPrimary } }}
+              />
+            </Card>
+            <Card loading={cargando}>
+              <Statistic
+                title="Consultas completadas"
+                value={citas.filter((c) => c.status === "completed").length}
+                styles={{ content: { color: token.colorSuccess } }}
+              />
+            </Card>
+          </Flex>
         </Col>
       </Row>
 
-      {/* Información adicional */}
-      <Card className="mt-6 border-l-4 border-l-[#55c5c4]">
-        <Title level={4} className="!text-[#367c84] !mb-3">
-          📅 Próximos Pasos
-        </Title>
-        <Paragraph className="text-gray-700 mb-2">
-          1. Completa tu perfil con información adicional si es necesario
-        </Paragraph>
-        <Paragraph className="text-gray-700 mb-2">
-          2. Agenda tu primera cita desde el menú "Mis Citas"
-        </Paragraph>
-        <Paragraph className="text-gray-700 mb-0">
-          3. Consulta tu historial clínico cuando necesites
-        </Paragraph>
+      <Card title="Tus datos" loading={cargando}>
+        {paciente && (
+          <Descriptions
+            bordered
+            size="small"
+            column={{ xs: 1, sm: 1, md: 2 }}
+            items={[
+              { key: "n", label: "Nombre", children: paciente.full_name.trim() },
+              {
+                key: "f",
+                label: "Nacimiento",
+                children: `${leerFecha(paciente.date_of_birth)?.format("DD/MM/YYYY")}${
+                  edad !== undefined ? ` · ${edad} años` : ""
+                }`,
+              },
+              { key: "c", label: "Correo", children: paciente.email },
+              { key: "t", label: "Teléfono", children: paciente.phone },
+              { key: "g", label: "Género", children: paciente.gender || "—" },
+              {
+                key: "u",
+                label: "Ubicación",
+                children: [paciente.city, paciente.state].filter(Boolean).join(", ") || "—",
+              },
+              {
+                key: "a",
+                label: "Tipo de atención",
+                span: "filled",
+                children: (
+                  <Tag color={paciente.attention_type === "Psicológica" ? "blue" : "green"}>
+                    {paciente.attention_type}
+                  </Tag>
+                ),
+              },
+            ]}
+          />
+        )}
       </Card>
-
-      {/* Contacto de Emergencia */}
-      <Card className="mt-6 bg-[#fef9e6]">
-        <Title level={4} className="!text-[#845c24] !mb-3">
-          📞 Contacto de Emergencia
-        </Title>
-        <Paragraph className="text-gray-700 mb-2">
-          Si necesitas atención urgente, contáctanos directamente:
-        </Paragraph>
-        <ul className="list-none pl-0">
-          <li className="mb-2">
-            <strong>Teléfono:</strong>{" "}
-            <a href="tel:8661597283" className="text-[#55c5c4] font-semibold">
-              866 159 7283
-            </a>
-          </li>
-          <li>
-            <strong>WhatsApp:</strong>{" "}
-            <a
-              href="https://wa.me/528661597283"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#55c5c4] font-semibold"
-            >
-              Enviar mensaje
-            </a>
-          </li>
-        </ul>
-      </Card>
-    </div>
+    </Flex>
   );
 }
