@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
 import bcrypt from 'bcryptjs';
+import {
+  COOKIE_SESION_DOCTOR,
+  crearSesionDoctor,
+  opcionesCookieSesion,
+} from '@/lib/auth/doctorSession';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,8 +85,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Login exitoso - devolver datos del doctor
-    return NextResponse.json({
+    // Login exitoso. La identidad viaja en una cookie httpOnly firmada: el
+    // navegador no puede leerla ni modificarla, y es lo que el middleware
+    // verifica en cada petición al panel. Los datos que van en el cuerpo son
+    // sólo para pintar la interfaz, nunca para autorizar.
+    const respuesta = NextResponse.json({
       success: true,
       doctor: {
         id: doctor.id,
@@ -93,6 +100,14 @@ export async function POST(request: Request) {
         role: doctor.role,
       },
     });
+
+    respuesta.cookies.set(
+      COOKIE_SESION_DOCTOR,
+      await crearSesionDoctor(doctor.id, doctor.role),
+      opcionesCookieSesion(process.env.NODE_ENV === "production"),
+    );
+
+    return respuesta;
   } catch (error) {
     console.error('Doctor login error:', error);
     return NextResponse.json(

@@ -173,7 +173,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       icon: <LogoutOutlined />,
       label: "Cerrar Sesión",
       danger: true,
-      onClick: () => {
+      onClick: async () => {
+        // La cookie de sesión es httpOnly, así que sólo el servidor puede
+        // borrarla: limpiar localStorage por sí solo dejaría la sesión viva.
+        await fetch("/api/logout-doctor", { method: "POST" }).catch(() => {});
         localStorage.removeItem("doctor");
         router.push("/login/doctor");
       },
