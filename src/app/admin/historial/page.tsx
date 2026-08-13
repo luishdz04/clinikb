@@ -1,748 +1,691 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Typography,
-  Card,
+  App,
   Button,
-  Table,
-  Modal,
+  Card,
+  Col,
+  Collapse,
+  DatePicker,
+  Descriptions,
+  Empty,
+  Flex,
   Form,
   Input,
-  DatePicker,
-  Select,
-  App,
-  Space,
-  Row,
-  Col,
-  Descriptions,
-  Tag,
-  Tabs,
   InputNumber,
-  Divider,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+  theme,
 } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import {
+  DeleteOutlined,
+  EditOutlined,
   FileTextOutlined,
   PlusOutlined,
-  EyeOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  UserOutlined,
-  CalendarOutlined,
-  MedicineBoxOutlined,
-  HeartOutlined,
-  AlertOutlined,
+  ReloadOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
-import type { ColumnsType } from "antd/es/table";
-import type { MedicalRecord } from "@/types/appointments";
-import dayjs, { Dayjs } from "dayjs";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/es";
 
+dayjs.extend(customParseFormat);
 dayjs.locale("es");
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
-interface Patient {
+const FORMATO_FECHA = "YYYY-MM-DD";
+
+/** `visit_date` y `next_visit_date` son `date`: sin zona, no se convierten. */
+const leerFecha = (v?: string | null) => (v ? dayjs(v, FORMATO_FECHA) : null);
+
+type TipoAtencion = "Psicológica" | "Médica";
+
+interface PacienteBreve {
   id: string;
   full_name: string;
-  email: string;
-  attention_type: "Psicológica" | "Médica";
+  attention_type: TipoAtencion;
+  date_of_birth?: string;
 }
 
-interface DoctorInfo {
+interface Expediente {
   id: string;
-  full_name: string;
-  email: string;
+  patient_id: string;
+  visit_date: string;
+  chief_complaint?: string | null;
+  diagnosis: string;
+  differential_diagnosis?: string | null;
+  treatment_plan?: string | null;
+  prescriptions?: string | null;
+  recommendations?: string | null;
+  next_visit_date?: string | null;
+  follow_up_notes?: string | null;
+  // Signos vitales (atención médica)
+  blood_pressure?: string | null;
+  heart_rate?: number | null;
+  temperature?: number | null;
+  weight?: number | null;
+  height?: number | null;
+  bmi?: number | null;
+  physical_examination?: string | null;
+  // Antecedentes
+  current_illness?: string | null;
+  medical_history?: string | null;
+  family_history?: string | null;
+  allergies?: string | null;
+  current_medications?: string | null;
+  // Examen mental (atención psicológica)
+  mental_status?: string | null;
+  mood?: string | null;
+  affect?: string | null;
+  thought_process?: string | null;
+  thought_content?: string | null;
+  perception?: string | null;
+  cognition?: string | null;
+  insight?: string | null;
+  judgment?: string | null;
+  risk_assessment?: string | null;
+  patient?: { full_name?: string; attention_type?: TipoAtencion } | null;
 }
 
-export default function HistorialClinicoPage() {
-  const { message, modal } = App.useApp();
-  const [doctor, setDoctor] = useState<DoctorInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
-  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [formModalVisible, setFormModalVisible] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<MedicalRecord | null>(null);
-  const [selectedPatientType, setSelectedPatientType] = useState<"Psicológica" | "Médica" | null>(
-    null
+/** Campos de texto largo, agrupados como se capturan en consulta. */
+const ANTECEDENTES: [keyof Expediente, string][] = [
+  ["current_illness", "Padecimiento actual"],
+  ["medical_history", "Antecedentes personales"],
+  ["family_history", "Antecedentes familiares"],
+  ["allergies", "Alergias"],
+  ["current_medications", "Medicación actual"],
+];
+
+const EXAMEN_MENTAL: [keyof Expediente, string][] = [
+  ["mental_status", "Estado mental"],
+  ["mood", "Estado de ánimo"],
+  ["affect", "Afecto"],
+  ["thought_process", "Curso del pensamiento"],
+  ["thought_content", "Contenido del pensamiento"],
+  ["perception", "Sensopercepción"],
+  ["cognition", "Cognición"],
+  ["insight", "Introspección"],
+  ["judgment", "Juicio"],
+  ["risk_assessment", "Valoración de riesgo"],
+];
+
+const PLAN: [keyof Expediente, string][] = [
+  ["differential_diagnosis", "Diagnóstico diferencial"],
+  ["treatment_plan", "Plan de tratamiento"],
+  ["prescriptions", "Prescripciones"],
+  ["recommendations", "Recomendaciones"],
+  ["follow_up_notes", "Notas de seguimiento"],
+];
+
+async function obtenerExpedientes(): Promise<Expediente[]> {
+  const res = await fetch("/api/admin/medical-records");
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Error al cargar los expedientes");
+  return json.records ?? json ?? [];
+}
+
+async function obtenerPacientes(): Promise<PacienteBreve[]> {
+  const res = await fetch("/api/admin/patients");
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Error al cargar los pacientes");
+  return (json.patients ?? []).filter(
+    (p: { status?: string }) => p.status === "approved",
   );
+}
+
+export default function HistorialPage() {
+  const { message, modal } = App.useApp();
+  const { token } = theme.useToken();
   const [form] = Form.useForm();
 
-  useEffect(() => {
-    const doctorStr = localStorage.getItem("doctor");
-    if (doctorStr) {
-      const doctorData = JSON.parse(doctorStr);
-      setDoctor(doctorData);
-    }
-  }, []);
+  const [expedientes, setExpedientes] = useState<Expediente[]>([]);
+  const [pacientes, setPacientes] = useState<PacienteBreve[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroPaciente, setFiltroPaciente] = useState<string>("all");
+
+  const [verDetalle, setVerDetalle] = useState<Expediente | null>(null);
+  const [modalForm, setModalForm] = useState(false);
+  const [editando, setEditando] = useState<Expediente | null>(null);
+
+  // El tipo de atención del paciente elegido decide qué secciones se piden:
+  // un examen mental en una consulta médica sobra, y los signos vitales en una
+  // psicológica también.
+  const pacienteElegido = Form.useWatch("patient_id", form);
+  const peso = Form.useWatch("weight", form);
+  const talla = Form.useWatch("height", form);
+
+  const tipoAtencion = useMemo<TipoAtencion | null>(() => {
+    const p = pacientes.find((x) => x.id === pacienteElegido);
+    return p?.attention_type ?? null;
+  }, [pacientes, pacienteElegido]);
+
+  // El IMC no se captura: se deriva de peso y talla, así no puede contradecirlos.
+  const imc = useMemo(() => {
+    if (!peso || !talla) return null;
+    const metros = Number(talla) / 100;
+    if (metros <= 0) return null;
+    return Number((Number(peso) / (metros * metros)).toFixed(2));
+  }, [peso, talla]);
+
+  const cargar = useCallback(
+    (vivo: () => boolean) =>
+      Promise.all([obtenerExpedientes(), obtenerPacientes()])
+        .then(([exp, pac]) => {
+          if (!vivo()) return;
+          setExpedientes(exp);
+          setPacientes(pac);
+        })
+        .catch((error: unknown) => {
+          console.error("Error cargando el historial:", error);
+          if (vivo()) {
+            message.error(error instanceof Error ? error.message : "Error al cargar");
+          }
+        })
+        .finally(() => {
+          if (vivo()) setLoading(false);
+        }),
+    [message],
+  );
 
   useEffect(() => {
-    if (doctor?.id) {
-      fetchRecords();
-      fetchPatients();
-    }
-  }, [doctor]);
+    let vivo = true;
+    cargar(() => vivo);
+    return () => {
+      vivo = false;
+    };
+  }, [cargar]);
 
-  const fetchRecords = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/admin/medical-records?doctor_id=${doctor?.id}`);
-      if (!response.ok) {
-        throw new Error("Error al cargar registros");
-      }
-      const data = await response.json();
-      setRecords(data.records || []);
-    } catch (error) {
-      console.error("Error loading records:", error);
-      message.error("Error al cargar el historial clínico");
-    } finally {
-      setLoading(false);
-    }
+  const refrescar = () => {
+    setLoading(true);
+    cargar(() => true);
   };
 
-  const fetchPatients = async () => {
-    try {
-      const response = await fetch("/api/admin/patients");
-      if (!response.ok) {
-        throw new Error("Error al cargar pacientes");
-      }
-      const data = await response.json();
-      // Solo pacientes aprobados
-      const approvedPatients = data.patients.filter((p: any) => p.status === "approved");
-      setPatients(approvedPatients);
-    } catch (error) {
-      console.error("Error loading patients:", error);
-    }
-  };
-
-  const handleCreate = () => {
-    setEditingRecord(null);
-    setSelectedPatientType(null);
-    form.resetFields();
-    setFormModalVisible(true);
-  };
-
-  const handleEdit = (record: MedicalRecord) => {
-    setEditingRecord(record);
-    setSelectedPatientType(record.patient?.attention_type || null);
-    form.setFieldsValue({
-      patient_id: record.patient_id,
-      visit_date: dayjs(record.visit_date),
-      chief_complaint: record.chief_complaint,
-      blood_pressure: record.blood_pressure,
-      heart_rate: record.heart_rate,
-      temperature: record.temperature,
-      weight: record.weight,
-      height: record.height,
-      current_illness: record.current_illness,
-      medical_history: record.medical_history,
-      family_history: record.family_history,
-      allergies: record.allergies,
-      current_medications: record.current_medications,
-      mental_status: record.mental_status,
-      mood: record.mood,
-      affect: record.affect,
-      thought_process: record.thought_process,
-      thought_content: record.thought_content,
-      risk_assessment: record.risk_assessment,
-      physical_examination: record.physical_examination,
-      diagnosis: record.diagnosis,
-      differential_diagnosis: record.differential_diagnosis,
-      treatment_plan: record.treatment_plan,
-      prescriptions: record.prescriptions,
-      recommendations: record.recommendations,
-      next_visit_date: record.next_visit_date ? dayjs(record.next_visit_date) : null,
-      follow_up_notes: record.follow_up_notes,
+  const visibles = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return expedientes.filter((e) => {
+      if (filtroPaciente !== "all" && e.patient_id !== filtroPaciente) return false;
+      if (!q) return true;
+      return [e.patient?.full_name, e.diagnosis, e.chief_complaint].some((v) =>
+        v?.toLowerCase().includes(q),
+      );
     });
-    setFormModalVisible(true);
+  }, [expedientes, busqueda, filtroPaciente]);
+
+  const esteMes = expedientes.filter((e) =>
+    leerFecha(e.visit_date)?.isSame(dayjs(), "month"),
+  ).length;
+
+  const abrirNuevo = () => {
+    setEditando(null);
+    form.resetFields();
+    form.setFieldsValue({ visit_date: dayjs() });
+    setModalForm(true);
   };
 
-  const handleDelete = (record: MedicalRecord) => {
+  const abrirEdicion = (e: Expediente) => {
+    setEditando(e);
+    form.setFieldsValue({
+      ...e,
+      visit_date: leerFecha(e.visit_date),
+      next_visit_date: leerFecha(e.next_visit_date),
+    });
+    setModalForm(true);
+  };
+
+  const eliminar = (e: Expediente) =>
     modal.confirm({
-      title: "Eliminar Registro",
-      content: "¿Estás seguro de eliminar este registro médico? Esta acción no se puede deshacer.",
+      title: "Eliminar expediente",
+      content: `Se borrará la nota clínica de ${
+        e.patient?.full_name ?? "el paciente"
+      } del ${leerFecha(e.visit_date)?.format("DD/MM/YYYY")}. Esta acción no se puede deshacer.`,
       okText: "Eliminar",
-      okType: "danger",
+      okButtonProps: { danger: true },
       cancelText: "Cancelar",
       onOk: async () => {
         try {
-          const response = await fetch(`/api/admin/medical-records?id=${record.id}`, {
-            method: "DELETE",
-          });
-
-          if (!response.ok) {
-            throw new Error("Error al eliminar");
-          }
-
-          message.success("Registro eliminado exitosamente");
-          fetchRecords();
-        } catch (error: any) {
-          message.error(error.message || "Error al eliminar registro");
+          const res = await fetch(`/api/admin/medical-records?id=${e.id}`, { method: "DELETE" });
+          const json = await res.json();
+          if (!res.ok) throw new Error(json.error || "Error al eliminar");
+          message.success("Expediente eliminado");
+          refrescar();
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : "Error al eliminar");
         }
       },
     });
-  };
 
-  const handleSubmit = async () => {
+  const guardar = async () => {
+    const values = await form.validateFields().catch(() => null);
+    if (!values) return;
+
+    const cuerpo = {
+      ...values,
+      visit_date: values.visit_date.format(FORMATO_FECHA),
+      next_visit_date: values.next_visit_date
+        ? values.next_visit_date.format(FORMATO_FECHA)
+        : null,
+      bmi: imc,
+      ...(editando ? { id: editando.id } : {}),
+    };
+
     try {
-      const values = await form.validateFields();
-
-      // Calcular BMI si hay peso y altura
-      let bmi = null;
-      if (values.weight && values.height) {
-        const heightInMeters = values.height / 100;
-        bmi = values.weight / (heightInMeters * heightInMeters);
-        bmi = Math.round(bmi * 100) / 100; // 2 decimales
-      }
-
-      const payload = {
-        ...values,
-        doctor_id: doctor?.id,
-        visit_date: values.visit_date.format("YYYY-MM-DD"),
-        next_visit_date: values.next_visit_date ? values.next_visit_date.format("YYYY-MM-DD") : null,
-        bmi,
-      };
-
-      const url = "/api/admin/medical-records";
-      const method = editingRecord ? "PUT" : "POST";
-
-      if (editingRecord) {
-        payload.id = editingRecord.id;
-      }
-
-      const response = await fetch(url, {
-        method,
+      setGuardando(true);
+      const res = await fetch("/api/admin/medical-records", {
+        method: editando ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(cuerpo),
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Error al guardar");
-      }
-
-      message.success(result.message);
-      setFormModalVisible(false);
-      fetchRecords();
-    } catch (error: any) {
-      if (error.errorFields) {
-        return;
-      }
-      message.error(error.message || "Error al guardar registro");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al guardar");
+      message.success(editando ? "Expediente actualizado" : "Expediente creado");
+      setModalForm(false);
+      refrescar();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Error al guardar");
+    } finally {
+      setGuardando(false);
     }
   };
 
-  const handlePatientChange = (patientId: string) => {
-    const patient = patients.find((p) => p.id === patientId);
-    setSelectedPatientType(patient?.attention_type || null);
-  };
-
-  const handleViewDetails = (record: MedicalRecord) => {
-    setSelectedRecord(record);
-    setDetailsModalVisible(true);
-  };
-
-  const columns: ColumnsType<MedicalRecord> = [
+  const columnas: ColumnsType<Expediente> = [
     {
       title: "Fecha",
       dataIndex: "visit_date",
       key: "visit_date",
-      render: (date: string) => (
-        <div>
-          <CalendarOutlined className="mr-1" />
-          {dayjs(date).format("DD/MM/YYYY")}
-        </div>
-      ),
-      sorter: (a, b) => dayjs(a.visit_date).diff(dayjs(b.visit_date)),
+      sorter: (a, b) => a.visit_date.localeCompare(b.visit_date),
+      defaultSortOrder: "descend",
+      render: (v: string) => leerFecha(v)?.format("DD/MM/YYYY"),
     },
     {
       title: "Paciente",
-      key: "patient",
-      render: (_, record) => (
-        <div>
-          <div className="font-semibold text-[#367c84]">
-            <UserOutlined className="mr-1" />
-            {record.patient?.full_name}
-          </div>
-          <Tag color={record.patient?.attention_type === "Psicológica" ? "blue" : "green"}>
-            {record.patient?.attention_type}
-          </Tag>
-        </div>
+      key: "paciente",
+      render: (_, r) => (
+        <Flex vertical>
+          <Text strong>{r.patient?.full_name?.trim() ?? "—"}</Text>
+          {r.patient?.attention_type && (
+            <Tag
+              color={r.patient.attention_type === "Psicológica" ? "blue" : "green"}
+              style={{ marginTop: 2, alignSelf: "flex-start" }}
+            >
+              {r.patient.attention_type}
+            </Tag>
+          )}
+        </Flex>
       ),
     },
     {
-      title: "Motivo de Consulta",
+      title: "Motivo",
       dataIndex: "chief_complaint",
       key: "chief_complaint",
-      ellipsis: true,
-      render: (text) => text || <Text type="secondary">No especificado</Text>,
+      responsive: ["lg"],
+      render: (v?: string | null) => v || "—",
     },
     {
       title: "Diagnóstico",
       dataIndex: "diagnosis",
       key: "diagnosis",
-      ellipsis: true,
-      render: (text) => <Text strong>{text}</Text>,
+      responsive: ["md"],
+    },
+    {
+      title: "Próxima visita",
+      dataIndex: "next_visit_date",
+      key: "next_visit_date",
+      responsive: ["lg"],
+      render: (v?: string | null) => leerFecha(v)?.format("DD/MM/YYYY") ?? "—",
     },
     {
       title: "Acciones",
-      key: "actions",
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetails(record)}
-            size="small"
-          >
-            Ver
-          </Button>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            size="small"
-          >
-            Editar
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-            size="small"
-          >
-            Eliminar
-          </Button>
+      key: "acciones",
+      fixed: "right",
+      render: (_, r) => (
+        <Space size="small">
+          <Tooltip title="Ver expediente">
+            <Button size="small" icon={<FileTextOutlined />} onClick={() => setVerDetalle(r)} />
+          </Tooltip>
+          <Tooltip title="Editar">
+            <Button size="small" icon={<EditOutlined />} onClick={() => abrirEdicion(r)} />
+          </Tooltip>
+          <Tooltip title="Eliminar">
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => eliminar(r)} />
+          </Tooltip>
         </Space>
       ),
-      width: 200,
     },
   ];
 
+  /** Renderiza sólo los campos con contenido: un expediente lleno de guiones no se lee. */
+  const seccionConTexto = (titulo: string, campos: [keyof Expediente, string][], e: Expediente) => {
+    const conValor = campos.filter(([k]) => e[k]);
+    if (conValor.length === 0) return null;
+    return {
+      key: titulo,
+      label: titulo,
+      children: (
+        <Descriptions column={1} size="small" bordered
+          items={conValor.map(([k, etiqueta]) => ({
+            key: String(k),
+            label: etiqueta,
+            children: String(e[k]),
+          }))}
+        />
+      ),
+    };
+  };
+
+  const camposTexto = (campos: [keyof Expediente, string][]) =>
+    campos.map(([nombre, etiqueta]) => (
+      <Form.Item key={String(nombre)} label={etiqueta} name={nombre as string}>
+        <TextArea rows={2} maxLength={2000} />
+      </Form.Item>
+    ));
+
   return (
-    <div>
-      <div className="mb-6 flex justify-between items-start">
+    <Flex vertical gap={token.marginLG}>
+      <Flex justify="space-between" align="flex-start" gap={token.margin} wrap>
         <div>
-          <Title level={2} className="!text-[#367c84] !mb-2">
-            <FileTextOutlined className="mr-2" />
-            Historial Clínico
+          <Title level={2} style={{ marginTop: 0, marginBottom: token.marginXXS }}>
+            Historial clínico
           </Title>
-          <Paragraph className="!mb-0 text-gray-600">
-            Registros médicos y psicológicos de los pacientes
+          <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            Notas de consulta de tus pacientes. Sólo tú ves tus expedientes.
           </Paragraph>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} size="large">
-          Nuevo Registro
+        <Button
+          type="primary"
+          size="large"
+          icon={<PlusOutlined />}
+          onClick={abrirNuevo}
+          disabled={pacientes.length === 0}
+        >
+          Nueva nota
         </Button>
-      </div>
+      </Flex>
+
+      <Row gutter={[token.margin, token.margin]}>
+        <Col xs={12} lg={8}>
+          <Card>
+            <Statistic title="Expedientes" value={expedientes.length} loading={loading}
+              styles={{ content: { color: token.colorPrimary } }} />
+          </Card>
+        </Col>
+        <Col xs={12} lg={8}>
+          <Card>
+            <Statistic title="Este mes" value={esteMes} loading={loading}
+              styles={{ content: { color: token.colorInfo } }} />
+          </Card>
+        </Col>
+        <Col xs={12} lg={8}>
+          <Card>
+            <Statistic
+              title="Pacientes con expediente"
+              value={new Set(expedientes.map((e) => e.patient_id)).size}
+              loading={loading}
+              styles={{ content: { color: token.colorSuccess } }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Card>
+        <Flex gap={token.margin} wrap>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Buscar por paciente, diagnóstico o motivo"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            style={{ flex: "1 1 260px" }}
+          />
+          <Select
+            value={filtroPaciente}
+            onChange={setFiltroPaciente}
+            showSearch
+            optionFilterProp="label"
+            style={{ flex: "0 1 260px", minWidth: 200 }}
+            options={[
+              { value: "all", label: "Todos los pacientes" },
+              ...pacientes.map((p) => ({ value: p.id, label: p.full_name.trim() })),
+            ]}
+          />
+          <Button icon={<ReloadOutlined />} onClick={refrescar} loading={loading}>
+            Actualizar
+          </Button>
+        </Flex>
+      </Card>
 
       <Card>
         <Table
-          columns={columns}
-          dataSource={records}
+          columns={columnas}
+          dataSource={visibles}
           rowKey="id"
           loading={loading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} de ${total} registros`,
+          scroll={{ x: "max-content" }}
+          pagination={{ pageSize: 10, showSizeChanger: true, responsive: true }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  expedientes.length ? "Ningún expediente coincide" : "Aún no hay notas clínicas"
+                }
+              />
+            ),
           }}
-          scroll={{ x: 1000 }}
         />
       </Card>
 
-      {/* Modal de Formulario */}
+      {/* Detalle */}
       <Modal
         title={
-          <Space>
-            <FileTextOutlined />
-            <span>{editingRecord ? "Editar Registro Médico" : "Nuevo Registro Médico"}</span>
-          </Space>
+          verDetalle
+            ? `${verDetalle.patient?.full_name?.trim()} · ${leerFecha(verDetalle.visit_date)?.format("DD/MM/YYYY")}`
+            : "Expediente"
         }
-        open={formModalVisible}
-        onCancel={() => setFormModalVisible(false)}
-        onOk={handleSubmit}
+        open={Boolean(verDetalle)}
+        onCancel={() => setVerDetalle(null)}
+        footer={<Button onClick={() => setVerDetalle(null)}>Cerrar</Button>}
+        width={800}
+      >
+        {verDetalle && (
+          <Flex vertical gap={token.margin}>
+            <Descriptions
+              bordered
+              size="small"
+              column={{ xs: 1, md: 2 }}
+              items={[
+                { key: "m", label: "Motivo", span: "filled", children: verDetalle.chief_complaint || "—" },
+                { key: "d", label: "Diagnóstico", span: "filled", children: verDetalle.diagnosis },
+                {
+                  key: "p",
+                  label: "Próxima visita",
+                  children: leerFecha(verDetalle.next_visit_date)?.format("DD/MM/YYYY") ?? "—",
+                },
+              ]}
+            />
+
+            {verDetalle.patient?.attention_type === "Médica" &&
+              (verDetalle.blood_pressure || verDetalle.heart_rate || verDetalle.weight) && (
+                <Descriptions
+                  title="Signos vitales"
+                  bordered
+                  size="small"
+                  column={{ xs: 1, sm: 2, md: 3 }}
+                  items={[
+                    { key: "ta", label: "Presión", children: verDetalle.blood_pressure || "—" },
+                    { key: "fc", label: "Frecuencia", children: verDetalle.heart_rate ? `${verDetalle.heart_rate} lpm` : "—" },
+                    { key: "t", label: "Temperatura", children: verDetalle.temperature ? `${verDetalle.temperature} °C` : "—" },
+                    { key: "pe", label: "Peso", children: verDetalle.weight ? `${verDetalle.weight} kg` : "—" },
+                    { key: "ta2", label: "Talla", children: verDetalle.height ? `${verDetalle.height} cm` : "—" },
+                    { key: "imc", label: "IMC", children: verDetalle.bmi ?? "—" },
+                  ]}
+                />
+              )}
+
+            <Collapse
+              items={[
+                seccionConTexto("Antecedentes", ANTECEDENTES, verDetalle),
+                ...(verDetalle.patient?.attention_type === "Psicológica"
+                  ? [seccionConTexto("Examen mental", EXAMEN_MENTAL, verDetalle)]
+                  : [seccionConTexto("Exploración física", [["physical_examination", "Exploración"]], verDetalle)]),
+                seccionConTexto("Plan y seguimiento", PLAN, verDetalle),
+              ].filter((x): x is NonNullable<typeof x> => Boolean(x))}
+            />
+          </Flex>
+        )}
+      </Modal>
+
+      {/* Alta y edición */}
+      <Modal
+        title={editando ? "Editar expediente" : "Nueva nota clínica"}
+        open={modalForm}
+        onOk={guardar}
+        onCancel={() => setModalForm(false)}
         okText="Guardar"
         cancelText="Cancelar"
-        width={900}
+        confirmLoading={guardando}
+        width={860}
+        destroyOnHidden
       >
-        <Form form={form} layout="vertical" className="mt-4">
-          <Row gutter={16}>
-            <Col span={12}>
+        <Form form={form} layout="vertical">
+          <Row gutter={token.margin}>
+            <Col xs={24} md={12}>
               <Form.Item
-                name="patient_id"
                 label="Paciente"
-                rules={[{ required: true, message: "Selecciona un paciente" }]}
+                name="patient_id"
+                rules={[{ required: true, message: "Elige al paciente" }]}
               >
                 <Select
-                  placeholder="Seleccionar paciente"
                   showSearch
-                  optionFilterProp="children"
-                  onChange={handlePatientChange}
-                  disabled={!!editingRecord}
-                >
-                  {patients.map((patient) => (
-                    <Select.Option key={patient.id} value={patient.id}>
-                      {patient.full_name} - {patient.attention_type}
-                    </Select.Option>
-                  ))}
-                </Select>
+                  optionFilterProp="label"
+                  placeholder="Selecciona"
+                  disabled={Boolean(editando)}
+                  options={pacientes.map((p) => ({
+                    value: p.id,
+                    label: `${p.full_name.trim()} (${p.attention_type})`,
+                  }))}
+                />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={6}>
               <Form.Item
+                label="Fecha de la consulta"
                 name="visit_date"
-                label="Fecha de Visita"
-                rules={[{ required: true, message: "Ingresa la fecha de visita" }]}
+                rules={[{ required: true, message: "Indica la fecha" }]}
               >
+                <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item label="Próxima visita" name="next_visit_date">
                 <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
               </Form.Item>
             </Col>
           </Row>
 
-          <Form.Item name="chief_complaint" label="Motivo de Consulta">
-            <TextArea rows={2} placeholder="Motivo principal de la consulta" />
+          <Form.Item label="Motivo de consulta" name="chief_complaint">
+            <TextArea rows={2} maxLength={500} />
+          </Form.Item>
+
+          <Form.Item
+            label="Diagnóstico"
+            name="diagnosis"
+            rules={[{ required: true, message: "El diagnóstico es obligatorio" }]}
+          >
+            <TextArea rows={2} maxLength={1000} />
           </Form.Item>
 
           <Tabs
-            defaultActiveKey="1"
             items={[
               {
-                key: "1",
-                label: "Signos Vitales",
-                children: (
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item name="blood_pressure" label="Presión Arterial">
-                        <Input placeholder="120/80" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item name="heart_rate" label="Frecuencia Cardíaca (bpm)">
-                        <InputNumber style={{ width: "100%" }} min={0} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item name="temperature" label="Temperatura (°C)">
-                        <InputNumber style={{ width: "100%" }} min={0} step={0.1} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item name="weight" label="Peso (kg)">
-                        <InputNumber style={{ width: "100%" }} min={0} step={0.1} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                      <Form.Item name="height" label="Altura (cm)">
-                        <InputNumber style={{ width: "100%" }} min={0} step={0.1} />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                ),
+                key: "antecedentes",
+                label: "Antecedentes",
+                children: <>{camposTexto(ANTECEDENTES)}</>,
               },
-              {
-                key: "2",
-                label: "Historia Clínica",
-                children: (
-                  <>
-                    <Form.Item name="current_illness" label="Padecimiento Actual">
-                      <TextArea rows={3} />
-                    </Form.Item>
-                    <Form.Item name="medical_history" label="Antecedentes Médicos">
-                      <TextArea rows={3} />
-                    </Form.Item>
-                    <Form.Item name="family_history" label="Antecedentes Familiares">
-                      <TextArea rows={2} />
-                    </Form.Item>
-                    <Form.Item name="allergies" label="Alergias">
-                      <TextArea rows={2} />
-                    </Form.Item>
-                    <Form.Item name="current_medications" label="Medicamentos Actuales">
-                      <TextArea rows={2} />
-                    </Form.Item>
-                  </>
-                ),
-              },
-              ...(selectedPatientType === "Psicológica"
+              // Las secciones específicas dependen del tipo de atención del
+              // paciente: pedir examen mental en una consulta médica sobra.
+              ...(tipoAtencion === "Psicológica"
                 ? [
                     {
-                      key: "3",
-                      label: "Evaluación Psicológica",
+                      key: "mental",
+                      label: "Examen mental",
+                      children: <>{camposTexto(EXAMEN_MENTAL)}</>,
+                    },
+                  ]
+                : []),
+              ...(tipoAtencion === "Médica"
+                ? [
+                    {
+                      key: "vitales",
+                      label: "Signos vitales",
                       children: (
                         <>
-                          <Row gutter={16}>
-                            <Col span={12}>
-                              <Form.Item name="mental_status" label="Estado Mental">
-                                <TextArea rows={2} />
+                          <Row gutter={token.margin}>
+                            <Col xs={12} md={8}>
+                              <Form.Item label="Presión arterial" name="blood_pressure">
+                                <Input placeholder="120/80" />
                               </Form.Item>
                             </Col>
-                            <Col span={12}>
-                              <Form.Item name="mood" label="Estado de Ánimo">
-                                <TextArea rows={2} />
+                            <Col xs={12} md={8}>
+                              <Form.Item label="Frecuencia cardiaca" name="heart_rate">
+                                <InputNumber min={20} max={250} suffix="lpm" style={{ width: "100%" }} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={12} md={8}>
+                              <Form.Item label="Temperatura" name="temperature">
+                                <InputNumber min={30} max={45} step={0.1} suffix="°C" style={{ width: "100%" }} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={12} md={8}>
+                              <Form.Item label="Peso" name="weight">
+                                <InputNumber min={1} max={400} step={0.1} suffix="kg" style={{ width: "100%" }} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={12} md={8}>
+                              <Form.Item label="Talla" name="height">
+                                <InputNumber min={30} max={250} step={0.5} suffix="cm" style={{ width: "100%" }} />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={12} md={8}>
+                              <Form.Item
+                                label="IMC"
+                                tooltip="Se calcula solo con el peso y la talla; no se captura para que no pueda contradecirlos."
+                              >
+                                <Input readOnly value={imc ?? ""} placeholder="—" />
                               </Form.Item>
                             </Col>
                           </Row>
-                          <Row gutter={16}>
-                            <Col span={12}>
-                              <Form.Item name="affect" label="Afecto">
-                                <TextArea rows={2} />
-                              </Form.Item>
-                            </Col>
-                            <Col span={12}>
-                              <Form.Item name="thought_process" label="Proceso de Pensamiento">
-                                <TextArea rows={2} />
-                              </Form.Item>
-                            </Col>
-                          </Row>
-                          <Form.Item name="thought_content" label="Contenido del Pensamiento">
-                            <TextArea rows={2} />
-                          </Form.Item>
-                          <Form.Item name="risk_assessment" label="Evaluación de Riesgo">
-                            <TextArea rows={3} placeholder="Riesgo suicida, homicida, etc." />
+                          <Form.Item label="Exploración física" name="physical_examination">
+                            <TextArea rows={3} maxLength={2000} />
                           </Form.Item>
                         </>
                       ),
                     },
                   ]
                 : []),
-              ...(selectedPatientType === "Médica"
-                ? [
-                    {
-                      key: "4",
-                      label: "Examen Físico",
-                      children: (
-                        <Form.Item name="physical_examination" label="Examen Físico">
-                          <TextArea rows={6} />
-                        </Form.Item>
-                      ),
-                    },
-                  ]
-                : []),
               {
-                key: "5",
-                label: "Diagnóstico y Tratamiento",
-                children: (
-                  <>
-                    <Form.Item
-                      name="diagnosis"
-                      label="Diagnóstico"
-                      rules={[{ required: true, message: "El diagnóstico es requerido" }]}
-                    >
-                      <TextArea rows={2} />
-                    </Form.Item>
-                    <Form.Item name="differential_diagnosis" label="Diagnóstico Diferencial">
-                      <TextArea rows={2} />
-                    </Form.Item>
-                    <Form.Item name="treatment_plan" label="Plan de Tratamiento">
-                      <TextArea rows={3} />
-                    </Form.Item>
-                    <Form.Item name="prescriptions" label="Recetas">
-                      <TextArea rows={3} />
-                    </Form.Item>
-                    <Form.Item name="recommendations" label="Recomendaciones">
-                      <TextArea rows={2} />
-                    </Form.Item>
-                  </>
-                ),
-              },
-              {
-                key: "6",
-                label: "Seguimiento",
-                children: (
-                  <>
-                    <Form.Item name="next_visit_date" label="Próxima Cita">
-                      <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-                    </Form.Item>
-                    <Form.Item name="follow_up_notes" label="Notas de Seguimiento">
-                      <TextArea rows={3} />
-                    </Form.Item>
-                  </>
-                ),
+                key: "plan",
+                label: "Plan y seguimiento",
+                children: <>{camposTexto(PLAN)}</>,
               },
             ]}
           />
         </Form>
       </Modal>
-
-      {/* Modal de Detalles */}
-      <Modal
-        title={
-          <Space>
-            <EyeOutlined />
-            <span>Detalles del Registro Médico</span>
-          </Space>
-        }
-        open={detailsModalVisible}
-        onCancel={() => setDetailsModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setDetailsModalVisible(false)}>
-            Cerrar
-          </Button>,
-        ]}
-        width={900}
-      >
-        {selectedRecord && (
-          <Tabs
-            defaultActiveKey="1"
-            items={[
-              {
-                key: "1",
-                label: "Información General",
-                children: (
-                  <Descriptions bordered column={2} size="small">
-                    <Descriptions.Item label="Paciente" span={2}>
-                      <UserOutlined className="mr-1" />
-                      <strong>{selectedRecord.patient?.full_name}</strong>
-                      <Tag className="ml-2" color={selectedRecord.patient?.attention_type === "Psicológica" ? "blue" : "green"}>
-                        {selectedRecord.patient?.attention_type}
-                      </Tag>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Fecha de Visita">
-                      {dayjs(selectedRecord.visit_date).format("DD/MM/YYYY")}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Doctor">
-                      {selectedRecord.doctor?.full_name}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Motivo de Consulta" span={2}>
-                      {selectedRecord.chief_complaint || "No especificado"}
-                    </Descriptions.Item>
-                    {selectedRecord.blood_pressure && (
-                      <Descriptions.Item label="Presión Arterial">
-                        <HeartOutlined className="mr-1" />
-                        {selectedRecord.blood_pressure}
-                      </Descriptions.Item>
-                    )}
-                    {selectedRecord.heart_rate && (
-                      <Descriptions.Item label="Frecuencia Cardíaca">
-                        {selectedRecord.heart_rate} bpm
-                      </Descriptions.Item>
-                    )}
-                    {selectedRecord.temperature && (
-                      <Descriptions.Item label="Temperatura">
-                        {selectedRecord.temperature} °C
-                      </Descriptions.Item>
-                    )}
-                    {selectedRecord.weight && (
-                      <Descriptions.Item label="Peso">
-                        {selectedRecord.weight} kg
-                      </Descriptions.Item>
-                    )}
-                    {selectedRecord.height && (
-                      <Descriptions.Item label="Altura">
-                        {selectedRecord.height} cm
-                      </Descriptions.Item>
-                    )}
-                    {selectedRecord.bmi && (
-                      <Descriptions.Item label="IMC">
-                        {selectedRecord.bmi}
-                      </Descriptions.Item>
-                    )}
-                  </Descriptions>
-                ),
-              },
-              {
-                key: "2",
-                label: "Historia y Evaluación",
-                children: (
-                  <div className="space-y-4">
-                    {selectedRecord.current_illness && (
-                      <div>
-                        <Text strong>Padecimiento Actual:</Text>
-                        <Paragraph>{selectedRecord.current_illness}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.medical_history && (
-                      <div>
-                        <Text strong>Antecedentes Médicos:</Text>
-                        <Paragraph>{selectedRecord.medical_history}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.allergies && (
-                      <div>
-                        <Text strong>
-                          <AlertOutlined className="mr-1" />
-                          Alergias:
-                        </Text>
-                        <Paragraph className="text-red-600">{selectedRecord.allergies}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.mental_status && (
-                      <div>
-                        <Text strong>Estado Mental:</Text>
-                        <Paragraph>{selectedRecord.mental_status}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.risk_assessment && (
-                      <div>
-                        <Text strong className="text-red-600">
-                          <AlertOutlined className="mr-1" />
-                          Evaluación de Riesgo:
-                        </Text>
-                        <Paragraph className="text-red-600">{selectedRecord.risk_assessment}</Paragraph>
-                      </div>
-                    )}
-                  </div>
-                ),
-              },
-              {
-                key: "3",
-                label: "Diagnóstico y Tratamiento",
-                children: (
-                  <div className="space-y-4">
-                    <div>
-                      <Text strong>Diagnóstico:</Text>
-                      <Paragraph className="text-[#367c84] text-lg font-semibold">
-                        {selectedRecord.diagnosis}
-                      </Paragraph>
-                    </div>
-                    {selectedRecord.differential_diagnosis && (
-                      <div>
-                        <Text strong>Diagnóstico Diferencial:</Text>
-                        <Paragraph>{selectedRecord.differential_diagnosis}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.treatment_plan && (
-                      <div>
-                        <Text strong>Plan de Tratamiento:</Text>
-                        <Paragraph>{selectedRecord.treatment_plan}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.prescriptions && (
-                      <div>
-                        <Text strong>
-                          <MedicineBoxOutlined className="mr-1" />
-                          Recetas:
-                        </Text>
-                        <Paragraph>{selectedRecord.prescriptions}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.recommendations && (
-                      <div>
-                        <Text strong>Recomendaciones:</Text>
-                        <Paragraph>{selectedRecord.recommendations}</Paragraph>
-                      </div>
-                    )}
-                    {selectedRecord.next_visit_date && (
-                      <div>
-                        <Text strong>Próxima Cita:</Text>
-                        <Paragraph>
-                          <CalendarOutlined className="mr-1" />
-                          {dayjs(selectedRecord.next_visit_date).format("DD/MM/YYYY")}
-                        </Paragraph>
-                      </div>
-                    )}
-                  </div>
-                ),
-              },
-            ]}
-          />
-        )}
-      </Modal>
-    </div>
+    </Flex>
   );
 }

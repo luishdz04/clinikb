@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { cookies } from "next/headers";
+import { COOKIE_SESION_DOCTOR, verificarSesionDoctor } from "@/lib/auth/doctorSession";
 
 // GET - Obtener registros médicos
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // Cliente admin, no el de cookies: los doctores no están en Supabase Auth,
+    // así que el cliente anónimo corría sin permisos sobre medical_records y
+    // la consulta fallaba siempre. La identidad ya se verifica con la sesión.
+    const supabase = createAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Error de configuración del servidor" }, { status: 500 });
+    }
     const searchParams = request.nextUrl.searchParams;
     const patientId = searchParams.get("patient_id");
-    const doctorId = searchParams.get("doctor_id");
     const recordId = searchParams.get("record_id");
 
     // Si se solicita un registro específico
@@ -49,10 +56,16 @@ export async function GET(request: NextRequest) {
       query = query.eq("patient_id", patientId);
     }
 
-    // Filtrar por doctor
-    if (doctorId) {
-      query = query.eq("doctor_id", doctorId);
+    // El doctor sale de la sesión, no de la query. Antes, sin `doctor_id` en
+    // la URL, la ruta devolvía los expedientes de TODOS los doctores: notas
+    // clínicas, diagnósticos y evaluaciones de salud mental de pacientes
+    // ajenos, a la vista de cualquier miembro del personal.
+    const galletas = await cookies();
+    const sesion = await verificarSesionDoctor(galletas.get(COOKIE_SESION_DOCTOR)?.value);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
+    query = query.eq("doctor_id", sesion.id);
 
     const { data: records, error } = await query;
 
@@ -77,13 +90,28 @@ export async function GET(request: NextRequest) {
 // POST - Crear nuevo registro médico
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // El autor del expediente es quien tiene la sesión, no lo que venga en el
+    // cuerpo: si no, un miembro del personal podría firmar notas clínicas a
+    // nombre de otro doctor.
+    const galletas = await cookies();
+    const sesion = await verificarSesionDoctor(galletas.get(COOKIE_SESION_DOCTOR)?.value);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+
+
+    // Cliente admin, no el de cookies: los doctores no están en Supabase Auth,
+    // así que el cliente anónimo corría sin permisos sobre medical_records y
+    // la consulta fallaba siempre. La identidad ya se verifica con la sesión.
+    const supabase = createAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Error de configuración del servidor" }, { status: 500 });
+    }
     const body = await request.json();
 
     const {
       patient_id,
       appointment_id,
-      doctor_id,
       visit_date,
       chief_complaint,
       blood_pressure,
@@ -119,9 +147,9 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validar campos requeridos
-    if (!patient_id || !doctor_id || !visit_date || !diagnosis) {
+    if (!patient_id || !visit_date || !diagnosis) {
       return NextResponse.json(
-        { error: "Faltan campos requeridos: patient_id, doctor_id, visit_date, diagnosis" },
+        { error: "Faltan campos requeridos: patient_id, visit_date, diagnosis" },
         { status: 400 }
       );
     }
@@ -131,7 +159,7 @@ export async function POST(request: NextRequest) {
       .insert({
         patient_id,
         appointment_id,
-        doctor_id,
+        doctor_id: sesion.id,
         visit_date,
         chief_complaint,
         blood_pressure,
@@ -192,7 +220,23 @@ export async function POST(request: NextRequest) {
 // PUT - Actualizar registro médico
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // El autor del expediente es quien tiene la sesión, no lo que venga en el
+    // cuerpo: si no, un miembro del personal podría firmar notas clínicas a
+    // nombre de otro doctor.
+    const galletas = await cookies();
+    const sesion = await verificarSesionDoctor(galletas.get(COOKIE_SESION_DOCTOR)?.value);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+
+
+    // Cliente admin, no el de cookies: los doctores no están en Supabase Auth,
+    // así que el cliente anónimo corría sin permisos sobre medical_records y
+    // la consulta fallaba siempre. La identidad ya se verifica con la sesión.
+    const supabase = createAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Error de configuración del servidor" }, { status: 500 });
+    }
     const body = await request.json();
     const { id, ...updateData } = body;
 
@@ -207,6 +251,8 @@ export async function PUT(request: NextRequest) {
       .from("medical_records")
       .update(updateData)
       .eq("id", id)
+      // Acotado al autor: nadie edita el expediente de otro doctor.
+      .eq("doctor_id", sesion.id)
       .select()
       .single();
 
@@ -234,7 +280,23 @@ export async function PUT(request: NextRequest) {
 // DELETE - Eliminar registro médico
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    // El autor del expediente es quien tiene la sesión, no lo que venga en el
+    // cuerpo: si no, un miembro del personal podría firmar notas clínicas a
+    // nombre de otro doctor.
+    const galletas = await cookies();
+    const sesion = await verificarSesionDoctor(galletas.get(COOKIE_SESION_DOCTOR)?.value);
+    if (!sesion) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+
+
+    // Cliente admin, no el de cookies: los doctores no están en Supabase Auth,
+    // así que el cliente anónimo corría sin permisos sobre medical_records y
+    // la consulta fallaba siempre. La identidad ya se verifica con la sesión.
+    const supabase = createAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Error de configuración del servidor" }, { status: 500 });
+    }
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
 
@@ -248,7 +310,8 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabase
       .from("medical_records")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("doctor_id", sesion.id);
 
     if (error) {
       console.error("Error deleting medical record:", error);
