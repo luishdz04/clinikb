@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
 import { getAppointmentApprovedEmailHTML } from "@/lib/email/approval-emails";
+import { crearSalaDeConsulta } from "@/lib/video/sala";
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,21 +57,21 @@ export async function POST(request: NextRequest) {
     let meetingLink = appointment.meeting_link;
     if (appointment.modality === 'online' && !meetingLink) {
       try {
-        const roomResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/video/create-room`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            appointmentId: appointmentId,
-            createdBy: appointment.doctor_id,
-          }),
-        });
-
-        if (roomResponse.ok) {
-          const roomData = await roomResponse.json();
-          meetingLink = roomData.meetingLink;
+        // Llamada directa, no por HTTP contra la propia app: aquí ya estamos
+        // en el servidor con permisos, y una petición interna no lleva
+        // cookies, así que fallaría la autenticación del endpoint.
+        const sala = await crearSalaDeConsulta(
+          appointmentId,
+          `doctor-${appointment.doctor_id}`,
+        );
+        if (sala.ok) {
+          meetingLink = sala.meetingLink;
+        } else {
+          console.error("No se pudo crear la sala:", sala.error);
         }
       } catch (error) {
         console.error("Error creating video room:", error);
+        // Continuar sin sala, se puede crear después
       }
     }
 

@@ -33,6 +33,22 @@ function getStreamClient(): StreamClient {
   return cliente;
 }
 
+/**
+ * Registra al usuario en Stream y le emite un token.
+ *
+ * El upsert es necesario para que el nombre aparezca en la llamada en vez del
+ * id. `generateUserToken` emite tokens de una hora por defecto; el cliente usa
+ * un `tokenProvider` para renovarlos solo, así que no hace falta alargarlos.
+ */
+export async function issueUserToken(
+  userId: string,
+  name: string,
+): Promise<string> {
+  const client = getStreamClient();
+  await client.upsertUsers([{ id: userId, name }]);
+  return client.generateUserToken({ user_id: userId });
+}
+
 // Generar token para usuario
 export function generateUserToken(userId: string): string {
   return getStreamClient().generateUserToken({ user_id: userId });

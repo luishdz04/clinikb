@@ -1,91 +1,45 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createVideoCall, isStreamConfigured } from "@/lib/stream";
-import { nanoid } from "nanoid";
+import { NextResponse, type NextRequest } from "next/server";
+import { resolverParticipante } from "@/lib/auth/participanteCita";
+import { crearSalaDeConsulta } from "@/lib/video/sala";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+/**
+ * Crea (o recupera) la sala de una consulta.
+ *
+ * `createdBy` llegaba en el cuerpo y no se verificaba contra nada, así que
+ * cualquiera podía crear salas para citas ajenas. Ahora el creador se deriva
+ * de la sesión y sólo puede hacerlo quien participa en esa cita.
+ */
 export async function POST(request: NextRequest) {
   try {
-    // Sin credenciales de Stream esto no puede funcionar. Se responde 503 para
-    // que quede claro que es configuración faltante y no una falla del código.
-    if (!isStreamConfigured()) {
-      return NextResponse.json(
-        { error: "Las videollamadas no están configuradas en este servidor." },
-        { status: 503 }
-      );
+    const { appointmentId } = (await request.json()) as { appointmentId?: string };
+
+    if (!appointmentId) {
+      return NextResponse.json({ error: "appointmentId es requerido" }, { status: 400 });
     }
 
-    const { appointmentId, createdBy } = await request.json();
-
-    if (!appointmentId || !createdBy) {
-      return NextResponse.json(
-        { error: "appointmentId y createdBy son requeridos" },
-        { status: 400 }
-      );
+    const quien = await resolverParticipante(appointmentId);
+    if (!quien.ok) {
+      return NextResponse.json({ error: quien.error }, { status: quien.status });
     }
 
-    const supabase = createAdminClient();
-
-    if (!supabase) {
-      return NextResponse.json(
-        { error: "Error de configuración del servidor" },
-        { status: 500 }
-      );
-    }
-
-    // Verificar que la cita existe
-    const { data: appointment, error: fetchError } = await supabase
-      .from("appointments")
-      .select("id, modality")
-      .eq("id", appointmentId)
-      .single();
-
-    if (fetchError || !appointment) {
-      return NextResponse.json(
-        { error: "Cita no encontrada" },
-        { status: 404 }
-      );
-    }
-
-    // Verificar que la cita es online
-    if (appointment.modality !== "online") {
-      return NextResponse.json(
-        { error: "Esta cita no es de modalidad online" },
-        { status: 400 }
-      );
-    }
-
-    // Generar ID único para la sala
-    const roomId = nanoid(12);
-    
-    // Crear sala de videollamada en Stream
-    await createVideoCall(roomId, createdBy);
-
-    // Guardar el link de la sala en la cita
-    const meetingLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/consulta/${appointmentId}/sala?room=${roomId}`;
-    
-    const { error: updateError } = await supabase
-      .from("appointments")
-      .update({ meeting_link: meetingLink })
-      .eq("id", appointmentId);
-
-    if (updateError) {
-      console.error("Error updating appointment:", updateError);
-      return NextResponse.json(
-        { error: "Error al guardar el link de la sala" },
-        { status: 500 }
-      );
+    const sala = await crearSalaDeConsulta(appointmentId, quien.participante.streamUserId);
+    if (!sala.ok) {
+      return NextResponse.json({ error: sala.error }, { status: sala.status });
     }
 
     return NextResponse.json({
-      message: "Sala de videollamada creada exitosamente",
-      roomId,
-      meetingLink,
+      message: "Sala de videollamada lista",
+      roomId: sala.roomId,
+      meetingLink: sala.meetingLink,
     });
   } catch (error) {
     console.error("Error creating room:", error);
     return NextResponse.json(
-      { error: "Error al crear sala de videollamada" },
-      { status: 500 }
+      { error: "Error al crear la sala de videollamada" },
+      { status: 500 },
     );
   }
 }
