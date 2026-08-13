@@ -1,394 +1,362 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Typography,
-  Card,
+  Alert,
+  App,
+  Badge,
   Button,
-  Table,
-  Tag,
-  Modal,
+  Calendar,
+  Card,
+  Col,
+  DatePicker,
+  Descriptions,
+  Empty,
+  Flex,
   Form,
   Input,
-  DatePicker,
-  TimePicker,
-  App,
-  Space,
-  Descriptions,
-  Statistic,
+  Modal,
+  Radio,
   Row,
-  Col,
+  Segmented,
   Select,
-  Empty,
+  Space,
   Spin,
-  Calendar,
-  Badge,
-  Tabs,
+  Statistic,
+  Table,
+  Tag,
+  TimePicker,
+  Tooltip,
+  Typography,
+  theme,
 } from "antd";
-import {
-  CalendarOutlined,
-  ClockCircleOutlined,
-  PlusOutlined,
-  EyeOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  MedicineBoxOutlined,
-  SendOutlined,
-} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
-import type { Appointment } from "@/types/appointments";
-import dayjs, { Dayjs } from "dayjs";
-import utc from "dayjs/plugin/utc";
-import timezone from "dayjs/plugin/timezone";
+import {
+  EyeOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  VideoCameraOutlined,
+} from "@ant-design/icons";
+import dayjs, { type Dayjs } from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/es";
+import Link from "next/link";
 
-dayjs.extend(utc);
-dayjs.extend(timezone);
+dayjs.extend(customParseFormat);
 dayjs.locale("es");
-const MONTERREY_TZ = "America/Monterrey";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
-interface Service {
+const FORMATO_FECHA = "YYYY-MM-DD";
+const FORMATO_HORA = "HH:mm:ss";
+
+/** Columnas `date` y `time` sin zona: se leen tal cual. */
+const leerFecha = (v?: string | null) => (v ? dayjs(v, FORMATO_FECHA) : null);
+const leerHora = (v?: string | null) => (v ? dayjs(v, FORMATO_HORA) : null);
+
+const ESTADOS: Record<string, { texto: string; color: string }> = {
+  pending: { texto: "Por confirmar", color: "warning" },
+  confirmed: { texto: "Confirmada", color: "success" },
+  completed: { texto: "Completada", color: "processing" },
+  rejected: { texto: "Rechazada", color: "error" },
+  cancelled: { texto: "Cancelada", color: "default" },
+  no_show: { texto: "No asististe", color: "error" },
+};
+
+const MODALIDADES: Record<string, { texto: string; color: string }> = {
+  online: { texto: "En línea", color: "blue" },
+  presencial: { texto: "Presencial", color: "green" },
+};
+
+interface Servicio {
   id: string;
   title: string;
   category: string;
   duration_minutes: number;
+  active?: boolean;
   available_modalities?: string[];
 }
 
-interface Doctor {
+interface Slot {
   id: string;
-  full_name: string;
-  specialty: string;
-}
-
-interface AvailableSlot {
-  id: string;
-  doctor_id: string;
-  service_id: string;
   slot_date: string;
   start_time: string;
   end_time: string;
-  modality?: string;
-  doctor?: Doctor;
-  service?: Service;
+  modality?: string | null;
+  service_id: string;
+  doctor?: { full_name?: string } | null;
+  service?: { title?: string; duration_minutes?: number } | null;
 }
 
-interface DaySlots {
-  [date: string]: AvailableSlot[];
+interface Cita {
+  id: string;
+  appointment_date: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  modality?: string | null;
+  patient_notes?: string | null;
+  rejection_reason?: string | null;
+  cancellation_reason?: string | null;
+  service?: { title?: string } | null;
+  doctor?: { full_name?: string } | null;
 }
 
-const statusConfig = {
-  pending: { color: "warning", label: "Pendiente", icon: <ClockCircleOutlined /> },
-  confirmed: { color: "success", label: "Confirmada", icon: <CheckCircleOutlined /> },
-  rejected: { color: "error", label: "Rechazada", icon: <CloseCircleOutlined /> },
-  cancelled: { color: "default", label: "Cancelada", icon: <CloseCircleOutlined /> },
-  completed: { color: "processing", label: "Completada", icon: <CheckCircleOutlined /> },
-  no_show: { color: "error", label: "No Asistió", icon: <CloseCircleOutlined /> },
-};
+async function obtenerCitas(): Promise<Cita[]> {
+  const res = await fetch("/api/patient/appointments");
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Error al cargar tus citas");
+  return json.appointments ?? [];
+}
 
-export default function MisCitasPage() {
+async function obtenerServicios(): Promise<Servicio[]> {
+  const res = await fetch("/api/services");
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Error al cargar los servicios");
+  return (json.services ?? []).filter((s: Servicio) => s.active !== false);
+}
+
+async function obtenerSlots(mes: Dayjs): Promise<Slot[]> {
+  const desde = mes.startOf("month").format(FORMATO_FECHA);
+  const hasta = mes.endOf("month").format(FORMATO_FECHA);
+  const res = await fetch(
+    `/api/patient/available-slots/month?start_date=${desde}&end_date=${hasta}`,
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || "Error al cargar los horarios");
+  return json.slots ?? [];
+}
+
+export default function CitasPacientePage() {
   const { message } = App.useApp();
-  const [loading, setLoading] = useState(true);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [bookingModalVisible, setBookingModalVisible] = useState(false);
-  const [bookingMode, setBookingMode] = useState<"calendar" | "request">("calendar");
-  
-  // Datos para agendar
-  const [services, setServices] = useState<Service[]>([]);
-  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
-  const [daySlots, setDaySlots] = useState<DaySlots>({});
-  const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
-  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState<Dayjs>(dayjs());
-  
-  const [form] = Form.useForm();
-  const [patientId, setPatientId] = useState<string | null>(null);
+  const { token } = theme.useToken();
+  const [formSolicitud] = Form.useForm();
 
-  // Estadísticas
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    confirmed: 0,
-    completed: 0,
-  });
+  const [citas, setCitas] = useState<Cita[]>([]);
+  const [servicios, setServicios] = useState<Servicio[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+
+  const [modalAgendar, setModalAgendar] = useState(false);
+  const [modo, setModo] = useState<"calendario" | "solicitud">("calendario");
+  const [servicioElegido, setServicioElegido] = useState<string | null>(null);
+  const [notas, setNotas] = useState("");
+
+  const [mes, setMes] = useState<Dayjs>(() => dayjs());
+  const [dia, setDia] = useState<Dayjs>(() => dayjs());
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [cargandoSlots, setCargandoSlots] = useState(false);
+  const [slotElegido, setSlotElegido] = useState<Slot | null>(null);
+
+  const [detalle, setDetalle] = useState<Cita | null>(null);
+
+  const cargar = useCallback(
+    (vivo: () => boolean) =>
+      Promise.all([obtenerCitas(), obtenerServicios()])
+        .then(([c, s]) => {
+          if (!vivo()) return;
+          setCitas(c);
+          setServicios(s);
+        })
+        .catch((e: unknown) => {
+          if (vivo()) message.error(e instanceof Error ? e.message : "Error al cargar");
+        })
+        .finally(() => {
+          if (vivo()) setCargando(false);
+        }),
+    [message],
+  );
 
   useEffect(() => {
-    fetchPatientData();
-  }, []);
+    let vivo = true;
+    cargar(() => vivo);
+    return () => {
+      vivo = false;
+    };
+  }, [cargar]);
 
+  // Los horarios se piden sólo cuando el modal está abierto en modo calendario:
+  // no tiene sentido traerlos mientras el paciente sólo mira su lista.
   useEffect(() => {
-    if (patientId) {
-      fetchAppointments();
-      fetchServices();
-    }
-  }, [patientId]);
-
-  const fetchPatientData = async () => {
-    try {
-      const response = await fetch("/api/patient/me");
-      if (!response.ok) throw new Error("Error al cargar datos");
-      const data = await response.json();
-      setPatientId(data.patient.id);
-    } catch (error) {
-      console.error("Error loading patient data:", error);
-      message.error("Error al cargar información del paciente");
-    }
-  };
-
-  const fetchAppointments = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/patient/appointments`);
-      if (!response.ok) throw new Error("Error al cargar citas");
-      const data = await response.json();
-      setAppointments(data.appointments || []);
-      calculateStats(data.appointments || []);
-    } catch (error) {
-      console.error("Error loading appointments:", error);
-      message.error("Error al cargar tus citas");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchServices = async () => {
-    try {
-      const response = await fetch("/api/services");
-      if (!response.ok) throw new Error("Error al cargar servicios");
-      const data = await response.json();
-      setServices(data.services || []);
-    } catch (error) {
-      console.error("Error loading services:", error);
-    }
-  };
-
-  const fetchAvailableSlotsForMonth = async (month: Dayjs) => {
-    try {
-      setLoadingSlots(true);
-      const startDate = month.startOf("month").format("YYYY-MM-DD");
-      const endDate = month.endOf("month").format("YYYY-MM-DD");
-      
-      const response = await fetch(
-        `/api/patient/available-slots/month?start_date=${startDate}&end_date=${endDate}`
-      );
-      
-      if (!response.ok) throw new Error("Error al cargar horarios");
-      const data = await response.json();
-      
-      // Agrupar slots por fecha
-      const grouped: DaySlots = {};
-      (data.slots || []).forEach((slot: AvailableSlot) => {
-        const dateKey = slot.slot_date;
-        if (!grouped[dateKey]) {
-          grouped[dateKey] = [];
-        }
-        grouped[dateKey].push(slot);
+    if (!modalAgendar || modo !== "calendario") return;
+    let vivo = true;
+    // El spinner lo encienden los manejadores que disparan esta carga (abrir el
+    // modal, cambiar de mes o de modo): hacerlo aquí sería un setState síncrono
+    // dentro del efecto y encadenaría renders.
+    obtenerSlots(mes)
+      .then((s) => {
+        if (vivo) setSlots(s);
+      })
+      .catch(() => {
+        if (vivo) setSlots([]);
+      })
+      .finally(() => {
+        if (vivo) setCargandoSlots(false);
       });
-      
-      setDaySlots(grouped);
-      setAvailableSlots(data.slots || []);
-    } catch (error) {
-      console.error("Error loading slots:", error);
-      setDaySlots({});
-      setAvailableSlots([]);
-    } finally {
-      setLoadingSlots(false);
+    return () => {
+      vivo = false;
+    };
+  }, [modalAgendar, modo, mes]);
+
+  const stats = {
+    total: citas.length,
+    pendientes: citas.filter((c) => c.status === "pending").length,
+    confirmadas: citas.filter((c) => c.status === "confirmed").length,
+    completadas: citas.filter((c) => c.status === "completed").length,
+  };
+
+  /** Sólo los horarios del servicio elegido; sin servicio, ninguno. */
+  const slotsDelServicio = useMemo(
+    () => (servicioElegido ? slots.filter((s) => s.service_id === servicioElegido) : []),
+    [slots, servicioElegido],
+  );
+
+  const porFecha = useMemo(() => {
+    const mapa = new Map<string, Slot[]>();
+    for (const s of slotsDelServicio) {
+      mapa.set(s.slot_date, [...(mapa.get(s.slot_date) ?? []), s]);
     }
+    return mapa;
+  }, [slotsDelServicio]);
+
+  const slotsDelDia = (porFecha.get(dia.format(FORMATO_FECHA)) ?? []).slice().sort((a, b) =>
+    a.start_time.localeCompare(b.start_time),
+  );
+
+  const modalidadesDelServicio = useMemo(() => {
+    const s = servicios.find((x) => x.id === servicioElegido);
+    const claves = s?.available_modalities?.length
+      ? s.available_modalities
+      : Object.keys(MODALIDADES);
+    return claves.map((k) => ({ value: k, label: MODALIDADES[k]?.texto ?? k }));
+  }, [servicios, servicioElegido]);
+
+  const abrirAgendar = () => {
+    setModo("calendario");
+    setServicioElegido(null);
+    setSlotElegido(null);
+    setNotas("");
+    setDia(dayjs());
+    setMes(dayjs());
+    setCargandoSlots(true);
+    formSolicitud.resetFields();
+    setModalAgendar(true);
   };
 
-  const calculateStats = (appointmentsData: Appointment[]) => {
-    setStats({
-      total: appointmentsData.length,
-      pending: appointmentsData.filter((a) => a.status === "pending").length,
-      confirmed: appointmentsData.filter((a) => a.status === "confirmed").length,
-      completed: appointmentsData.filter((a) => a.status === "completed").length,
-    });
-  };
-
-  const handleViewDetails = (appointment: Appointment) => {
-    setSelectedAppointment(appointment);
-    setDetailsModalVisible(true);
-  };
-
-  const handleStartBooking = () => {
-    setBookingMode("calendar");
-    setSelectedDate(dayjs());
-    setSelectedSlot(null);
-    setCalendarMonth(dayjs());
-    form.resetFields();
-    setBookingModalVisible(true);
-    fetchAvailableSlotsForMonth(dayjs());
-  };
-
-  const handleMonthChange = (date: Dayjs) => {
-    setCalendarMonth(date);
-    fetchAvailableSlotsForMonth(date);
-  };
-
-  const handleDateSelect = (date: Dayjs) => {
-    setSelectedDate(date);
-    setSelectedSlot(null);
-  };
-
-  const handleSlotSelect = (slot: AvailableSlot) => {
-    setSelectedSlot(slot);
-  };
-
-  const handleSwitchToRequest = () => {
-    setBookingMode("request");
-    setSelectedSlot(null);
-    form.resetFields();
-  };
-
-  const handleBookAppointment = async () => {
+  const reservar = async () => {
+    if (!slotElegido || !servicioElegido) return;
     try {
-      const values = await form.validateFields();
-      
-      if (bookingMode === "calendar") {
-        // Agendar con horario disponible
-        if (!selectedSlot || !selectedDate) {
-          message.error("Por favor selecciona un horario");
-          return;
-        }
-
-        const payload = {
-          service_id: selectedSlot.service_id,
-          slot_id: selectedSlot.id,
-          appointment_date: selectedDate.format("YYYY-MM-DD"),
-          start_time: selectedSlot.start_time,
-          end_time: selectedSlot.end_time,
-          doctor_id: selectedSlot.doctor_id,
-          patient_notes: values.notes,
-        };
-
-        const response = await fetch("/api/patient/appointments/book", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.error || "Error al agendar cita");
-        }
-
-        message.success("¡Cita agendada exitosamente!");
-      } else {
-        // Solicitar cita sin horario fijo
-        const payload = {
-          modality: values.modality,
-          service_id: values.service_id,
-          preferred_date: values.preferred_date?.format("YYYY-MM-DD"),
-          preferred_time: values.preferred_time?.format("HH:mm"),
-          patient_notes: values.notes,
-        };
-
-        const response = await fetch("/api/patient/appointments/request", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.error || "Error al solicitar cita");
-        }
-
-        message.success("¡Solicitud enviada! El doctor te contactará para confirmar.");
-      }
-      
-      setBookingModalVisible(false);
-      fetchAppointments();
-    } catch (error: any) {
-      if (error.errorFields) return;
-      message.error(error.message || "Error al procesar la solicitud");
+      setEnviando(true);
+      const res = await fetch("/api/patient/appointments/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // Sólo esto: la fecha, la hora y el doctor los toma el servidor del
+          // horario elegido.
+          service_id: servicioElegido,
+          slot_id: slotElegido.id,
+          patient_notes: notas || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo reservar");
+      message.success(json.message || "Solicitud enviada");
+      setModalAgendar(false);
+      setCargando(true);
+      cargar(() => true);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "No se pudo reservar");
+    } finally {
+      setEnviando(false);
     }
   };
 
-  const columns: ColumnsType<Appointment> = [
+  const solicitar = async () => {
+    const v = await formSolicitud.validateFields().catch(() => null);
+    if (!v) return;
+    try {
+      setEnviando(true);
+      const res = await fetch("/api/patient/appointments/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: v.service_id,
+          modality: v.modality,
+          preferred_date: v.preferred_date ? v.preferred_date.format(FORMATO_FECHA) : null,
+          preferred_time: v.preferred_time ? v.preferred_time.format(FORMATO_HORA) : null,
+          patient_notes: v.patient_notes || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo enviar la solicitud");
+      message.success(json.message || "Solicitud enviada");
+      setModalAgendar(false);
+      setCargando(true);
+      cargar(() => true);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "No se pudo enviar la solicitud");
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const columnas: ColumnsType<Cita> = [
     {
-      title: "Fecha",
-      key: "date",
-      render: (_, record) => (
-        <div>
-          <div className="font-semibold">
-            <CalendarOutlined className="mr-1" />
-            {dayjs.utc(record.appointment_date).format("DD/MM/YYYY")}
-          </div>
-          <div className="text-xs text-gray-500">
-            <ClockCircleOutlined className="mr-1" />
-            {dayjs(record.start_time, "HH:mm:ss").format("HH:mm")}
-          </div>
-        </div>
+      title: "Fecha y hora",
+      key: "cuando",
+      sorter: (a, b) =>
+        `${a.appointment_date}${a.start_time}`.localeCompare(`${b.appointment_date}${b.start_time}`),
+      defaultSortOrder: "descend",
+      render: (_, r) => (
+        <Flex vertical>
+          <Text strong>{leerFecha(r.appointment_date)?.format("ddd DD/MM/YYYY")}</Text>
+          <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            {leerHora(r.start_time)?.format("HH:mm")} h
+          </Text>
+        </Flex>
       ),
-      sorter: (a, b) => dayjs(a.appointment_date).diff(dayjs(b.appointment_date)),
+    },
+    { title: "Servicio", key: "servicio", render: (_, r) => r.service?.title ?? "—" },
+    {
+      title: "Te atiende",
+      key: "doctor",
+      responsive: ["md"],
+      render: (_, r) => r.doctor?.full_name ?? "—",
     },
     {
-      title: "Servicio",
-      dataIndex: ["service", "title"],
-      key: "service",
-      render: (text, record) => (
-        <div>
-          <div className="font-medium">{text}</div>
-          <Tag color={record.service?.category === "Psicológica" ? "blue" : "green"}>
-            {record.service?.category}
-          </Tag>
-        </div>
-      ),
+      title: "Modalidad",
+      dataIndex: "modality",
+      key: "modality",
+      responsive: ["lg"],
+      render: (m?: string | null) => {
+        const e = m ? MODALIDADES[m] : undefined;
+        return e ? <Tag color={e.color}>{e.texto}</Tag> : <Tag>Sin definir</Tag>;
+      },
     },
     {
       title: "Estado",
       dataIndex: "status",
       key: "status",
-      render: (status: string) => {
-        const config = statusConfig[status as keyof typeof statusConfig];
-        return (
-          <Tag icon={config.icon} color={config.color}>
-            {config.label}
-          </Tag>
-        );
-      },
-      filters: [
-        { text: "Pendiente", value: "pending" },
-        { text: "Confirmada", value: "confirmed" },
-        { text: "Completada", value: "completed" },
-      ],
-      onFilter: (value, record) => record.status === value,
+      render: (s: string) => (
+        <Tag color={ESTADOS[s]?.color}>{ESTADOS[s]?.texto ?? s}</Tag>
+      ),
     },
     {
-      title: "Acciones",
-      key: "actions",
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetails(record)}
-            size="small"
-          >
-            Ver Detalles
-          </Button>
-          {record.modality === 'online' && record.status === 'confirmed' && record.meeting_link && (
-            <Button
-              type="primary"
-              size="small"
-              onClick={() => {
-                const url = new URL(record.meeting_link!);
-                const roomId = url.searchParams.get('room');
-                window.location.href = `/consulta/${record.id}/lobby`;
-              }}
-              style={{ backgroundColor: "#52c41a" }}
-            >
-              🎥 Unirse
-            </Button>
+      title: "",
+      key: "acciones",
+      fixed: "right",
+      render: (_, r) => (
+        <Space size="small">
+          <Tooltip title="Ver detalle">
+            <Button size="small" icon={<EyeOutlined />} onClick={() => setDetalle(r)} />
+          </Tooltip>
+          {r.status === "confirmed" && r.modality === "online" && (
+            <Tooltip title="Entrar a la consulta">
+              <Link href={`/consulta/${r.id}/lobby`}>
+                <Button size="small" type="primary" icon={<VideoCameraOutlined />} />
+              </Link>
+            </Tooltip>
           )}
         </Space>
       ),
@@ -396,96 +364,75 @@ export default function MisCitasPage() {
   ];
 
   return (
-    <div>
-      <div className="mb-6 flex justify-between items-start">
+    <Flex vertical gap={token.marginLG}>
+      <Flex justify="space-between" align="flex-start" gap={token.margin} wrap>
         <div>
-          <Title level={2} className="!text-[#55c5c4] !mb-2">
-            <CalendarOutlined className="mr-2" />
-            Mis Citas
+          <Title level={2} style={{ marginTop: 0, marginBottom: token.marginXXS }}>
+            Mis citas
           </Title>
-          <Paragraph className="!mb-0 text-gray-600">
-            Gestiona tus citas médicas y psicológicas
+          <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            Agenda una consulta y sigue el estado de las que ya pediste.
           </Paragraph>
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={handleStartBooking}
-          size="large"
-          style={{ backgroundColor: "#55c5c4" }}
-        >
-          Agendar Nueva Cita
+        <Button type="primary" size="large" icon={<PlusOutlined />} onClick={abrirAgendar}>
+          Agendar cita
         </Button>
-      </div>
+      </Flex>
 
-      {/* Estadísticas */}
-      <Row gutter={[16, 16]} className="mb-6">
-        <Col xs={24} sm={12} md={6}>
-          <Card variant="borderless">
-            <Statistic
-              title="Total de Citas"
-              value={stats.total}
-              styles={{ content: { color: "#55c5c4" } }}
-              prefix={<CalendarOutlined />}
-            />
+      <Row gutter={[token.margin, token.margin]}>
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic title="Total" value={stats.total} loading={cargando}
+              styles={{ content: { color: token.colorPrimary } }} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card variant="borderless">
-            <Statistic
-              title="Pendientes"
-              value={stats.pending}
-              styles={{ content: { color: "#faad14" } }}
-              prefix={<ClockCircleOutlined />}
-            />
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic title="Por confirmar" value={stats.pendientes} loading={cargando}
+              styles={{ content: { color: token.colorWarning } }} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card variant="borderless">
-            <Statistic
-              title="Confirmadas"
-              value={stats.confirmed}
-              styles={{ content: { color: "#52c41a" } }}
-              prefix={<CheckCircleOutlined />}
-            />
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic title="Confirmadas" value={stats.confirmadas} loading={cargando}
+              styles={{ content: { color: token.colorSuccess } }} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
-          <Card variant="borderless">
-            <Statistic
-              title="Completadas"
-              value={stats.completed}
-              styles={{ content: { color: "#1890ff" } }}
-              prefix={<CheckCircleOutlined />}
-            />
+        <Col xs={12} lg={6}>
+          <Card>
+            <Statistic title="Completadas" value={stats.completadas} loading={cargando}
+              styles={{ content: { color: token.colorInfo } }} />
           </Card>
         </Col>
       </Row>
 
-      {/* Tabla de Citas */}
-      <Card>
+      <Card
+        title="Historial de citas"
+        extra={
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              setCargando(true);
+              cargar(() => true);
+            }}
+            loading={cargando}
+          >
+            Actualizar
+          </Button>
+        }
+      >
         <Table
-          columns={columns}
-          dataSource={appointments}
+          columns={columnas}
+          dataSource={citas}
           rowKey="id"
-          loading={loading}
-          pagination={{
-            pageSize: 10,
-            showTotal: (total, range) => `${range[0]}-${range[1]} de ${total} citas`,
-          }}
+          loading={cargando}
+          scroll={{ x: "max-content" }}
+          pagination={{ pageSize: 10, hideOnSinglePage: true, responsive: true }}
           locale={{
             emptyText: (
-              <Empty
-                description="No tienes citas registradas"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              >
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={handleStartBooking}
-                  style={{ backgroundColor: "#55c5c4" }}
-                >
-                  Agendar Mi Primera Cita
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aún no tienes citas">
+                <Button type="primary" icon={<PlusOutlined />} onClick={abrirAgendar}>
+                  Agendar la primera
                 </Button>
               </Empty>
             ),
@@ -493,399 +440,276 @@ export default function MisCitasPage() {
         />
       </Card>
 
-      {/* Modal de Detalles */}
+      {/* Agendar */}
       <Modal
-        title={
-          <Space>
-            <EyeOutlined />
-            <span>Detalles de la Cita</span>
-          </Space>
-        }
-        open={detailsModalVisible}
-        onCancel={() => setDetailsModalVisible(false)}
-        footer={[
-          selectedAppointment?.modality === 'online' && 
-          selectedAppointment?.status === 'confirmed' && 
-          selectedAppointment?.meeting_link && (
-            <Button 
-              key="join"
-              type="primary"
-              onClick={() => {
-                const url = new URL(selectedAppointment.meeting_link!);
-                const roomId = url.searchParams.get('room');
-                window.location.href = `/consulta/${selectedAppointment.id}/lobby`;
-              }}
-              style={{ backgroundColor: "#52c41a" }}
-            >
-              🎥 Unirse a la Videollamada
-            </Button>
-          ),
-          <Button key="close" onClick={() => setDetailsModalVisible(false)}>
-            Cerrar
-          </Button>,
-        ]}
-        width={600}
-      >
-        {selectedAppointment && (
-          <Descriptions bordered column={1} size="small">
-            <Descriptions.Item label="Estado">
-              <Tag
-                icon={statusConfig[selectedAppointment.status as keyof typeof statusConfig].icon}
-                color={statusConfig[selectedAppointment.status as keyof typeof statusConfig].color}
-              >
-                {statusConfig[selectedAppointment.status as keyof typeof statusConfig].label}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="Fecha">
-              {dayjs.utc(selectedAppointment.appointment_date).format("DD/MM/YYYY")}
-            </Descriptions.Item>
-            <Descriptions.Item label="Hora">
-              {dayjs(selectedAppointment.start_time, "HH:mm:ss").format("HH:mm")} -{" "}
-              {dayjs(selectedAppointment.end_time, "HH:mm:ss").format("HH:mm")}
-            </Descriptions.Item>
-            <Descriptions.Item label="Servicio">
-              <div>
-                <div>{selectedAppointment.service?.title}</div>
-                <Tag color={selectedAppointment.service?.category === "Psicológica" ? "blue" : "green"}>
-                  {selectedAppointment.service?.category}
-                </Tag>
-              </div>
-            </Descriptions.Item>
-            {selectedAppointment.patient_notes && (
-              <Descriptions.Item label="Tus Notas">
-                {selectedAppointment.patient_notes}
-              </Descriptions.Item>
-            )}
-            {selectedAppointment.meeting_link && (
-              <Descriptions.Item label="Link de Reunión">
-                <a
-                  href={selectedAppointment.meeting_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#55c5c4]"
+        title="Agendar una cita"
+        open={modalAgendar}
+        onCancel={() => setModalAgendar(false)}
+        width={820}
+        footer={
+          modo === "calendario"
+            ? [
+                <Button key="c" onClick={() => setModalAgendar(false)}>
+                  Cancelar
+                </Button>,
+                <Button
+                  key="ok"
+                  type="primary"
+                  loading={enviando}
+                  disabled={!slotElegido}
+                  onClick={reservar}
                 >
-                  Abrir Link de Videollamada
-                </a>
-              </Descriptions.Item>
-            )}
-            {selectedAppointment.doctor_notes && (
-              <Descriptions.Item label="Notas del Doctor">
-                {selectedAppointment.doctor_notes}
-              </Descriptions.Item>
-            )}
-            {selectedAppointment.rejection_reason && (
-              <Descriptions.Item label="Razón de Rechazo">
-                <Text type="danger">{selectedAppointment.rejection_reason}</Text>
-              </Descriptions.Item>
-            )}
-          </Descriptions>
-        )}
-      </Modal>
-
-      {/* Modal para Agendar Cita */}
-      <Modal
-        title={
-          <Space>
-            <PlusOutlined />
-            <span>Agendar Nueva Cita</span>
-          </Space>
+                  Reservar este horario
+                </Button>,
+              ]
+            : [
+                <Button key="c" onClick={() => setModalAgendar(false)}>
+                  Cancelar
+                </Button>,
+                <Button key="ok" type="primary" loading={enviando} onClick={solicitar}>
+                  Enviar solicitud
+                </Button>,
+              ]
         }
-        open={bookingModalVisible}
-        onCancel={() => setBookingModalVisible(false)}
-        onOk={handleBookAppointment}
-        okText={bookingMode === "calendar" ? "Confirmar Cita" : "Enviar Solicitud"}
-        cancelText="Cancelar"
-        width={1000}
-        okButtonProps={{ 
-          disabled: bookingMode === "calendar" ? !selectedSlot : false,
-          style: { backgroundColor: "#55c5c4" } 
-        }}
       >
-        <Form form={form} layout="vertical">
-          <Tabs
-            activeKey={bookingMode}
-            onChange={(key) => setBookingMode(key as "calendar" | "request")}
-            items={[
-              {
-                key: "calendar",
-                label: (
-                  <span>
-                    <CalendarOutlined className="mr-1" />
-                    Ver Horarios Disponibles
-                  </span>
-                ),
-              },
-              {
-                key: "request",
-                label: (
-                  <span>
-                    <SendOutlined className="mr-1" />
-                    Solicitar Cita
-                  </span>
-                ),
-              },
+        <Flex vertical gap={token.margin}>
+          <Segmented
+            block
+            value={modo}
+            onChange={(v) => {
+              if (v === "calendario") setCargandoSlots(true);
+              setModo(v as "calendario" | "solicitud");
+            }}
+            options={[
+              { label: "Elegir de los horarios abiertos", value: "calendario" },
+              { label: "Pedir otro horario", value: "solicitud" },
             ]}
           />
 
-          {bookingMode === "calendar" ? (
-            <div className="mt-4">
-              <Row gutter={16}>
-                {/* Columna izquierda: Calendario */}
-                <Col span={14}>
-                  {loadingSlots ? (
-                    <div className="text-center py-20">
-                      <Spin size="large" />
-                      <div className="mt-4">Cargando horarios...</div>
-                    </div>
-                  ) : (
-                    <Calendar
-                      fullscreen={false}
-                      value={selectedDate}
-                      onSelect={handleDateSelect}
-                      onPanelChange={handleMonthChange}
-                      cellRender={(current, info) => {
-                        if (info.type !== 'date') return info.originNode;
-                        
-                        const dateKey = current.format("YYYY-MM-DD");
-                        const slotsForDay = daySlots[dateKey] || [];
-                        
-                        if (slotsForDay.length > 0) {
+          {modo === "calendario" ? (
+            <Flex vertical gap={token.margin}>
+              <Select
+                placeholder="Primero elige el servicio"
+                value={servicioElegido}
+                onChange={(v) => {
+                  setServicioElegido(v);
+                  setSlotElegido(null);
+                }}
+                options={servicios.map((s) => ({
+                  value: s.id,
+                  label: `${s.title} (${s.duration_minutes} min)`,
+                }))}
+              />
+
+              {!servicioElegido ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="Elige un servicio para ver los horarios disponibles"
+                />
+              ) : (
+                <Row gutter={[token.margin, token.margin]}>
+                  <Col xs={24} md={14}>
+                    <Spin spinning={cargandoSlots}>
+                      <Calendar
+                        fullscreen={false}
+                        value={dia}
+                        onSelect={(f) => {
+                          setDia(f);
+                          setSlotElegido(null);
+                        }}
+                        onPanelChange={(f) => {
+                          setCargandoSlots(true);
+                          setMes(f);
+                        }}
+                        // Sólo hacia adelante: no se agenda en el pasado.
+                        disabledDate={(f) => f.isBefore(dayjs(), "day")}
+                        cellRender={(f, info) => {
+                          if (info.type !== "date") return info.originNode;
+                          const n = porFecha.get(f.format(FORMATO_FECHA))?.length ?? 0;
+                          if (!n) return null;
                           return (
-                            <div className="ant-picker-cell-inner">
-                              {current.date()}
-                              <Badge 
-                                count={slotsForDay.length} 
-                                style={{ backgroundColor: "#55c5c4", marginTop: 4 }}
-                                title={`${slotsForDay.length} horarios disponibles`}
-                              />
-                            </div>
+                            <Flex justify="center">
+                              <Badge count={n} color={token.colorSuccess} size="small" />
+                            </Flex>
                           );
-                        }
-                        return (
-                          <div className="ant-picker-cell-inner">
-                            {current.date()}
-                          </div>
-                        );
-                      }}
-                      disabledDate={(current) => {
-                        if (!current) return true;
-                        const dateKey = current.format("YYYY-MM-DD");
-                        const isPast = current < dayjs().startOf("day");
-                        const hasSlots = daySlots[dateKey]?.length > 0;
-                        return isPast || !hasSlots;
-                      }}
-                    />
-                  )}
-                  
-                  {Object.keys(daySlots).length === 0 && !loadingSlots && (
-                    <div className="text-center mt-4 p-4 bg-gray-50 rounded-lg">
-                      <Text type="secondary">
-                        No hay horarios disponibles este mes.{" "}
-                        <Button 
-                          type="link" 
-                          onClick={handleSwitchToRequest}
-                          className="p-0"
+                        }}
+                      />
+                    </Spin>
+                  </Col>
+
+                  <Col xs={24} md={10}>
+                    <Card size="small" title={dia.format("dddd D [de] MMMM")}>
+                      {slotsDelDia.length === 0 ? (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="Sin horarios este día"
+                        />
+                      ) : (
+                        <Radio.Group
+                          value={slotElegido?.id}
+                          onChange={(e) =>
+                            setSlotElegido(slotsDelDia.find((s) => s.id === e.target.value) ?? null)
+                          }
+                          style={{ width: "100%" }}
                         >
-                          Solicita una cita
-                        </Button>
-                      </Text>
-                    </div>
-                  )}
-                </Col>
+                          <Flex vertical gap={token.marginXS}>
+                            {slotsDelDia.map((s) => {
+                              const mod = s.modality ? MODALIDADES[s.modality] : undefined;
+                              return (
+                                <Radio.Button
+                                  key={s.id}
+                                  value={s.id}
+                                  style={{ height: "auto", padding: token.paddingXS }}
+                                >
+                                  <Flex vertical>
+                                    <Text strong>
+                                      {leerHora(s.start_time)?.format("HH:mm")} -{" "}
+                                      {leerHora(s.end_time)?.format("HH:mm")}
+                                    </Text>
+                                    <Space size={4} wrap>
+                                      {mod && <Tag color={mod.color}>{mod.texto}</Tag>}
+                                      {s.doctor?.full_name && (
+                                        <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                                          {s.doctor.full_name}
+                                        </Text>
+                                      )}
+                                    </Space>
+                                  </Flex>
+                                </Radio.Button>
+                              );
+                            })}
+                          </Flex>
+                        </Radio.Group>
+                      )}
+                    </Card>
+                  </Col>
 
-                {/* Columna derecha: Horarios del día seleccionado */}
-                <Col span={10}>
-                  <div className="border-l pl-4">
-                    <Text strong className="text-base">
-                      Horarios para {selectedDate.format("DD/MM/YYYY")}:
-                    </Text>
-                    
-                    {(() => {
-                      const dateKey = selectedDate.format("YYYY-MM-DD");
-                      const slotsForDay = daySlots[dateKey] || [];
-                      
-                      if (slotsForDay.length === 0) {
-                        return (
-                          <Empty
-                            className="mt-4"
-                            description="No hay horarios disponibles"
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          >
-                            <Button 
-                              type="primary" 
-                              onClick={handleSwitchToRequest}
-                              style={{ backgroundColor: "#55c5c4" }}
-                            >
-                              Solicitar Cita
-                            </Button>
-                          </Empty>
-                        );
-                      }
-
-                      return (
-                        <div className="mt-4 space-y-2 max-h-[400px] overflow-y-auto">
-                          {slotsForDay.map((slot) => (
-                            <Card
-                              key={slot.id}
-                              hoverable
-                              onClick={() => handleSlotSelect(slot)}
-                              className={`cursor-pointer ${
-                                selectedSlot?.id === slot.id
-                                  ? "!border-2 !border-[#55c5c4] !bg-[#55c5c4]/10"
-                                  : "border"
-                              }`}
-                              size="small"
-                            >
-                              <div className="flex justify-between items-start">
-                                <div className="flex-1">
-                                  <div className="font-semibold text-base">
-                                    <ClockCircleOutlined className="mr-2" />
-                                    {dayjs(slot.start_time, "HH:mm:ss").format("HH:mm")} -{" "}
-                                    {dayjs(slot.end_time, "HH:mm:ss").format("HH:mm")}
-                                  </div>
-                                  <div className="mt-2 flex gap-2">
-                                    <Tag color={slot.service?.category === "Psicológica" ? "blue" : "green"}>
-                                      {slot.service?.title}
-                                    </Tag>
-                                    <Tag color={slot.modality === 'online' ? 'cyan' : 'orange'}>
-                                      {slot.modality === 'online' ? '💻 Online' : '🏥 Presencial'}
-                                    </Tag>
-                                  </div>
-                                  {slot.doctor && (
-                                    <div className="text-sm text-gray-600 mt-1">
-                                      {slot.doctor.full_name}
-                                    </div>
-                                  )}
-                                </div>
-                                {selectedSlot?.id === slot.id && (
-                                  <div className="ml-2">
-                                    <CheckCircleOutlined 
-                                      className="text-[#55c5c4]" 
-                                      style={{ fontSize: 24 }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                            </Card>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </Col>
-              </Row>
-
-              {/* Notas adicionales */}
-              {selectedSlot && (
-                <Form.Item 
-                  name="notes" 
-                  label="Notas adicionales (opcional)" 
-                  className="mt-4 mb-0"
+                  <Col xs={24}>
+                    <TextArea
+                      rows={2}
+                      maxLength={500}
+                      showCount
+                      placeholder="¿Algo que quieras contarle al doctor antes de la consulta? (opcional)"
+                      value={notas}
+                      onChange={(e) => setNotas(e.target.value)}
+                    />
+                  </Col>
+                </Row>
+              )}
+            </Flex>
+          ) : (
+            <Flex vertical gap={token.marginXS}>
+              <Alert
+                type="info"
+                showIcon
+                title="Sin horario fijo"
+                description="Manda tu preferencia y el doctor te propondrá una hora concreta."
+              />
+              <Form form={formSolicitud} layout="vertical">
+                <Form.Item
+                  label="Servicio"
+                  name="service_id"
+                  rules={[{ required: true, message: "Elige el servicio" }]}
                 >
-                  <TextArea
-                    rows={2}
-                    placeholder="¿Hay algo que el doctor deba saber?"
+                  <Select
+                    placeholder="Selecciona"
+                    onChange={(v) => setServicioElegido(v)}
+                    options={servicios.map((s) => ({
+                      value: s.id,
+                      label: `${s.title} (${s.duration_minutes} min)`,
+                    }))}
                   />
                 </Form.Item>
-              )}
-            </div>
-          ) : (
-            <div className="mt-4">
-              <Text type="secondary" className="block mb-4">
-                Si no encuentras un horario disponible, puedes enviar una solicitud y el doctor te contactará para coordinar la cita.
-              </Text>
-              
-              <Form.Item
-                name="service_id"
-                label="Tipo de servicio"
-                rules={[{ required: true, message: "Selecciona un servicio" }]}
-              >
-                <Select
-                  placeholder="Elige el tipo de consulta"
-                  size="large"
-                  onChange={() => {
-                    // Resetear modalidad cuando cambia el servicio
-                    form.setFieldsValue({ modality: undefined });
-                  }}
-                  options={services.map((service) => ({
-                    label: `${service.title} (${service.category})`,
-                    value: service.id,
-                  }))}
-                />
-              </Form.Item>
 
-              <Form.Item noStyle shouldUpdate={(prevValues, currentValues) => prevValues.service_id !== currentValues.service_id}>
-                {({ getFieldValue }) => {
-                  const selectedServiceId = getFieldValue('service_id');
-                  const selectedService = services.find(s => s.id === selectedServiceId);
-                  const modalities = selectedService?.available_modalities || ['online', 'presencial'];
-                  
-                  return (
-                    <Form.Item
-                      name="modality"
-                      label="Modalidad preferida"
-                      rules={[{ required: true, message: "Selecciona la modalidad" }]}
-                    >
-                      <Select
-                        placeholder="¿Cómo prefieres tu cita?"
-                        size="large"
-                        disabled={!selectedServiceId}
-                        options={modalities.map((mod: string) => ({
-                          label: mod === 'online' ? '💻 En línea (videollamada)' : '🏥 Presencial',
-                          value: mod,
-                        }))}
+                <Form.Item
+                  label="Modalidad"
+                  name="modality"
+                  rules={[{ required: true, message: "Elige la modalidad" }]}
+                >
+                  <Select placeholder="Selecciona" options={modalidadesDelServicio} />
+                </Form.Item>
+
+                <Row gutter={token.margin}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item label="Día que prefieres" name="preferred_date">
+                      <DatePicker
+                        style={{ width: "100%" }}
+                        format="DD/MM/YYYY"
+                        minDate={dayjs().startOf("day")}
                       />
                     </Form.Item>
-                  );
-                }}
-              </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item label="Hora que prefieres" name="preferred_time">
+                      <TimePicker style={{ width: "100%" }} format="HH:mm" minuteStep={15} />
+                    </Form.Item>
+                  </Col>
+                </Row>
 
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="preferred_date"
-                    label="Fecha preferida (opcional)"
-                  >
-                    <DatePicker
-                      className="w-full"
-                      size="large"
-                      format="DD/MM/YYYY"
-                      disabledDate={(current) =>
-                        current && current < dayjs().startOf("day")
-                      }
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="preferred_time"
-                    label="Hora preferida (opcional)"
-                  >
-                    <TimePicker
-                      className="w-full"
-                      size="large"
-                      format="HH:mm"
-                      placeholder="Selecciona la hora"
-                      minuteStep={15}
-                      showNow={false}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-
-              <Form.Item
-                name="notes"
-                label="Información adicional"
-              >
-                <TextArea
-                  rows={3}
-                  placeholder="Describe tu necesidad o preferencias de horario..."
-                />
-              </Form.Item>
-            </div>
+                <Form.Item label="Comentarios" name="patient_notes">
+                  <TextArea rows={3} maxLength={500} showCount />
+                </Form.Item>
+              </Form>
+            </Flex>
           )}
-        </Form>
+        </Flex>
       </Modal>
-    </div>
+
+      {/* Detalle */}
+      <Modal
+        title="Detalle de tu cita"
+        open={Boolean(detalle)}
+        onCancel={() => setDetalle(null)}
+        footer={<Button onClick={() => setDetalle(null)}>Cerrar</Button>}
+        width={640}
+      >
+        {detalle && (
+          <Descriptions
+            bordered
+            size="small"
+            column={{ xs: 1, sm: 1, md: 2 }}
+            items={[
+              { key: "s", label: "Servicio", span: "filled", children: detalle.service?.title ?? "—" },
+              {
+                key: "f",
+                label: "Fecha",
+                children: leerFecha(detalle.appointment_date)?.format("dddd D [de] MMMM"),
+              },
+              {
+                key: "h",
+                label: "Horario",
+                children: `${leerHora(detalle.start_time)?.format("HH:mm")} - ${leerHora(
+                  detalle.end_time,
+                )?.format("HH:mm")}`,
+              },
+              { key: "d", label: "Te atiende", children: detalle.doctor?.full_name ?? "—" },
+              {
+                key: "m",
+                label: "Modalidad",
+                children: (() => {
+                  const e = detalle.modality ? MODALIDADES[detalle.modality] : undefined;
+                  return e ? <Tag color={e.color}>{e.texto}</Tag> : <Tag>Sin definir</Tag>;
+                })(),
+              },
+              {
+                key: "e",
+                label: "Estado",
+                span: "filled",
+                children: <Tag color={ESTADOS[detalle.status]?.color}>{ESTADOS[detalle.status]?.texto}</Tag>,
+              },
+              ...(detalle.patient_notes
+                ? [{ key: "n", label: "Tu comentario", span: "filled" as const, children: detalle.patient_notes }]
+                : []),
+              ...(detalle.rejection_reason
+                ? [{ key: "r", label: "Motivo del rechazo", span: "filled" as const, children: detalle.rejection_reason }]
+                : []),
+              ...(detalle.cancellation_reason
+                ? [{ key: "c", label: "Motivo de cancelación", span: "filled" as const, children: detalle.cancellation_reason }]
+                : []),
+            ]}
+          />
+        )}
+      </Modal>
+    </Flex>
   );
 }
