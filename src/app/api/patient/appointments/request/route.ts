@@ -152,10 +152,10 @@ export async function POST(request: Request) {
     try {
       await sendEmail({
         to: patient.email,
-        subject: "📝 Solicitud de Cita Recibida - CliniKB",
+        subject: "Solicitud de Cita Recibida - CliniKB",
         html: getAppointmentRequestEmailHTML(patient.full_name || "Paciente", {
           service: service.title,
-          modality: modality === 'online' ? '💻 En línea (videollamada)' : '🏥 Presencial',
+          modality: modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
           preferredDate: preferred_date ? dayjs(preferred_date).format("DD/MM/YYYY") : undefined,
           preferredTime: preferred_time || undefined,
           notes: patient_notes || undefined,
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
 
         await sendEmail({
           to: adminEmail,
-          subject: `🔔 Nueva Solicitud de Cita - ${patient.full_name}`,
+          subject: ` Nueva Solicitud de Cita - ${patient.full_name}`,
           html: getAdminAppointmentNotificationEmailHTML(
             patient.full_name || "Paciente",
             patient.email,
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
               date: preferred_date ? dayjs(preferred_date).format("DD/MM/YYYY") : "Por definir",
               time: preferred_time || "Por definir",
               doctor: doctorData?.full_name || "Por asignar",
-              modality: modality === 'online' ? '💻 En línea (videollamada)' : '🏥 Presencial',
+              modality: modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
               notes: patient_notes,
             },
             dashboardUrl

@@ -36,20 +36,13 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const {
-      service_id,
-      slot_id,
-      appointment_date,
-      start_time,
-      end_time,
-      doctor_id,
-      patient_notes,
-    } = body;
+    // Sólo el servicio y el horario: la fecha, la hora y el doctor salen del
+    // slot, así que pedirlos al cliente sólo daba margen a contradecirlo.
+    const { service_id, slot_id, patient_notes } = body;
 
-    // Validar campos requeridos
-    if (!service_id || !slot_id || !appointment_date || !start_time || !end_time || !doctor_id) {
+    if (!service_id || !slot_id) {
       return NextResponse.json(
-        { error: "Faltan campos requeridos" },
+        { error: "Falta el servicio o el horario" },
         { status: 400 }
       );
     }
@@ -125,24 +118,24 @@ export async function POST(request: Request) {
     const { data: doctorData } = await supabase
       .from("doctors")
       .select("full_name")
-      .eq("id", doctor_id)
+      .eq("id", slot.doctor_id)
       .single();
 
     // Enviar email de reserva confirmada al paciente
     try {
       // Formatear las horas correctamente
-      const formattedStartTime = start_time.substring(0, 5); // "HH:mm:ss" -> "HH:mm"
-      const formattedEndTime = end_time.substring(0, 5);
+      const formattedStartTime = slot.start_time.substring(0, 5);
+      const formattedEndTime = slot.end_time.substring(0, 5);
       
       await sendEmail({
         to: patient.email,
-        subject: "📅 Solicitud de Cita Recibida - CliniKB",
+        subject: "Solicitud de cita recibida - CliniKB",
         html: getAppointmentConfirmationEmailHTML(patient.full_name || "Paciente", {
           service: serviceData?.title || "Consulta",
-          date: dayjs(appointment_date).format("DD/MM/YYYY"),
+          date: dayjs(slot.slot_date).format("DD/MM/YYYY"),
           time: `${formattedStartTime} - ${formattedEndTime}`,
           doctor: doctorData?.full_name || "Profesional de CliniKB",
-          modality: slot.modality === 'online' ? '💻 En línea (videollamada)' : '🏥 Presencial',
+          modality: slot.modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
         }),
       });
       console.log("Confirmation email sent to:", patient.email, "- Name:", patient.full_name);
@@ -155,23 +148,23 @@ export async function POST(request: Request) {
     try {
       const adminEmail = process.env.ADMIN_EMAIL;
       if (adminEmail) {
-        const formattedStartTime = start_time.substring(0, 5);
-        const formattedEndTime = end_time.substring(0, 5);
+        const formattedStartTime = slot.start_time.substring(0, 5);
+        const formattedEndTime = slot.end_time.substring(0, 5);
         const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        const dashboardUrl = `${origin}/admin/dashboard`;
+        const dashboardUrl = `${origin}/admin/citas`;
 
         await sendEmail({
           to: adminEmail,
-          subject: `🔔 Nueva Cita Reservada - ${patient.full_name}`,
+          subject: `Nueva cita reservada - ${patient.full_name}`,
           html: getAdminAppointmentNotificationEmailHTML(
             patient.full_name || "Paciente",
             patient.email,
             {
               service: serviceData?.title || "Consulta",
-              date: dayjs(appointment_date).format("DD/MM/YYYY"),
+              date: dayjs(slot.slot_date).format("DD/MM/YYYY"),
               time: `${formattedStartTime} - ${formattedEndTime}`,
               doctor: doctorData?.full_name || "Profesional de CliniKB",
-              modality: slot.modality === 'online' ? '💻 En línea (videollamada)' : '🏥 Presencial',
+              modality: slot.modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
               notes: undefined,
             },
             dashboardUrl
