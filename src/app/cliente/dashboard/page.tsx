@@ -188,7 +188,7 @@ export default function DashboardPacientePage() {
                       <Text type="secondary">Te atiende {proxima.doctor.full_name}</Text>
                     )}
                   </Flex>
-                  <Space direction="vertical" align="end">
+                  <Space orientation="vertical" align="end">
                     <Tag color={ESTADOS[proxima.status]?.color}>
                       {ESTADOS[proxima.status]?.texto ?? proxima.status}
                     </Tag>

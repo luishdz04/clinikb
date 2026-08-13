@@ -24,9 +24,16 @@ const { Text } = Typography;
  */
 function LlamadaEnCurso({ alSalir }: { alSalir: () => void }) {
   const { token } = theme.useToken();
-  const { useCallCallingState, useMicrophoneState } = useCallStateHooks();
+  const {
+    useCallCallingState,
+    useMicrophoneState,
+    useCameraState,
+    useRemoteParticipants,
+  } = useCallStateHooks();
   const estado = useCallCallingState();
   const { isSpeakingWhileMuted } = useMicrophoneState();
+  const { isMute: camaraApagada } = useCameraState();
+  const remotos = useRemoteParticipants();
 
   if (estado === CallingState.JOINING) {
     return (
@@ -66,8 +73,42 @@ function LlamadaEnCurso({ alSalir }: { alSalir: () => void }) {
       )}
       <AvisoAutoplay />
 
-      <div style={{ flex: 1, minHeight: 0 }}>
+      {/*
+        Sin nadie más y sin cámara propia, SpeakerLayout no tiene nada que
+        pintar y la pantalla queda en negro sin explicación. El mensaje va
+        encima, no en lugar del layout, para que aparezca el video en cuanto
+        alguien se conecte.
+      */}
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <SpeakerLayout />
+
+        {remotos.length === 0 && (
+          <Flex
+            vertical
+            align="center"
+            justify="center"
+            gap={token.marginXS}
+            style={{ position: "absolute", inset: 0, pointerEvents: "none", textAlign: "center", padding: token.padding }}
+          >
+            <Spin />
+            <Text style={{ color: "#fff", fontSize: token.fontSizeLG }}>
+              Esperando a que se conecte la otra persona
+            </Text>
+            <Text style={{ color: "rgba(255,255,255,0.65)" }}>
+              Puedes quedarte en esta pantalla; entrará automáticamente.
+            </Text>
+          </Flex>
+        )}
+
+        {camaraApagada && remotos.length > 0 && (
+          <Flex
+            align="center"
+            justify="center"
+            style={{ position: "absolute", insetInlineStart: 0, bottom: 0, padding: token.paddingXS, pointerEvents: "none" }}
+          >
+            <Text style={{ color: "rgba(255,255,255,0.65)" }}>Tu cámara está apagada</Text>
+          </Flex>
+        )}
       </div>
 
       <Flex justify="center" style={{ padding: token.padding, background: "rgba(0,0,0,0.7)" }}>
