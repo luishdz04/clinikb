@@ -1,37 +1,48 @@
 /*
  * Ajustes del SDK de Stream a la marca CliniKB.
  *
- * Se importa DESPUÉS de la hoja del SDK para poder ganarle. Todo cuelga de
- * `.str-video`, la clase que aplica <StreamTheme>, así que nada de esto se
- * escapa al resto de la aplicación.
+ * Se importa DESPUÉS de la hoja del SDK para poder ganarle por cascada. Todo
+ * cuelga de `.str-video`, la clase que aplica <StreamTheme>, así que nada de
+ * esto se escapa al resto de la aplicación.
  *
- * Los colores están escritos a mano y no salen de los tokens de antd porque
- * esto es CSS estático: los tokens sólo existen en JavaScript. Deben coincidir
- * con src/theme/themeConfig.ts.
+ * Los colores van escritos a mano y no salen de los tokens de antd porque esto
+ * es CSS estático: los tokens sólo existen en JavaScript. Deben coincidir con
+ * src/theme/themeConfig.ts.
  */
 
 .str-video {
-  /* Acento principal: marca los bordes de quien habla, el dispositivo
-     seleccionado y los estados activos. Por defecto es el azul #005fff. */
+  /*
+   * Acento real del SDK. Colorea el radio del dispositivo seleccionado, el
+   * borde de quien está hablando y las iniciales del avatar. Por defecto es el
+   * azul #005fff.
+   */
   --str-video__primary-color: #55c5c4;
-  --str-video__brand-color1: #55c5c4;
-  --str-video__brand-color2: #367c84;
 
-  /* Botones de la barra de llamada. */
-  --str-video__button-primary-base: #55c5c4;
-  --str-video__button-primary-hover: #367c84;
-  --str-video__button-primary-active: #55c5c4;
+  /* Sólo se usa para el borde al pasar el cursor sobre un desplegable. */
+  --str-video__brand-color1: #55c5c4;
+
+  /*
+   * OJO con `button-primary-base`: no es un color de acento, es el fondo EN
+   * REPOSO de todos los botones y de las filas del panel de dispositivos. Su
+   * valor por defecto (#19232d) es oscuro a propósito. Pintarlo de turquesa
+   * teñía cada fila del panel y volvía ilegible cuál estaba seleccionada, así
+   * que aquí se deja como viene.
+   *
+   * Sólo se tocan los estados en los que el turquesa sí comunica algo: el
+   * botón activo y el paso del cursor.
+   */
+  --str-video__button-primary-active: #367c84;
+  --str-video__button-primary-hover: #2b6068;
   --str-video__button-primary-pressed: #2b6068;
 
-  /* Colgar sigue en rojo a propósito: es la acción destructiva y conviene que
-     no se confunda con el resto. */
+  /* Colgar se queda en rojo: es la acción destructiva y no debe confundirse. */
 }
 
 /*
  * El video no llenaba su contenedor y quedaba una franja negra al lado.
- * `participant-view` trae un max-width de 1280px y una proporción propia; en
- * una consulta a dos siempre queremos que ocupe todo el espacio disponible.
- * Es el mismo ajuste que documenta la guía de Stream para video a sangre.
+ * `participant-view` trae un max-width de 1280px y proporción propia; en una
+ * consulta a dos siempre queremos que ocupe todo el espacio. Es el ajuste que
+ * documenta la guía de Stream para video a sangre.
  */
 .str-video__speaker-layout__spotlight .str-video__participant-view {
   width: 100%;
@@ -65,4 +76,64 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/*
+ * Panel de dispositivos. El del SDK viene en inglés y con las filas muy
+ * apretadas; esto sólo mejora legibilidad y separación, sin reemplazar el
+ * componente.
+ */
+.str-video__device-settings {
+  padding: 4px;
+}
+
+.str-video__device-settings__device-kind {
+  margin-bottom: 12px;
+}
+
+/* Que se note cuál está seleccionado sin teñir las demás filas. */
+.str-video__device-settings .str-video__option {
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.str-video__device-settings .str-video__option:hover {
+  background-color: rgba(85, 197, 196, 0.12);
+}
+
+/*
+ * Legibilidad dentro de la llamada.
+ *
+ * El nombre del participante y los avisos del SDK salían en gris tenue sobre
+ * el video, que en una imagen clara desaparecen y en una oscura se confunden
+ * con el fondo. Se les pone un fondo sólido y texto blanco, que es legible
+ * pase lo que pase detrás.
+ */
+.str-video__participant-view .str-video__participant-details {
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 0 8px 0 0;
+}
+
+.str-video__participant-details__name {
+  color: #ffffff;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+/* Avisos flotantes del SDK (hablar en mudo, permisos). */
+.str-video__notification,
+.str-video__speaking-while-muted {
+  background: rgba(0, 0, 0, 0.85);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+}
+
+/*
+ * Barra de controles propia: se dejan los botones oficiales pero con más aire
+ * entre ellos y área táctil suficiente para el celular.
+ */
+.str-video__call-controls__button {
+  width: 48px;
+  height: 48px;
 }

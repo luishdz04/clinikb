@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CallControls,
   CallingState,
+  CancelCallButton,
   SpeakerLayout,
   StreamCall,
+  ToggleAudioOutputButton,
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
   useCall,
   useCallStateHooks,
 } from "@stream-io/video-react-sdk";
@@ -111,8 +114,22 @@ function LlamadaEnCurso({ alSalir }: { alSalir: () => void }) {
         )}
       </div>
 
-      <Flex justify="center" style={{ padding: token.padding, background: "rgba(0,0,0,0.7)" }}>
-        <CallControls onLeave={alSalir} />
+      {/*
+        Barra propia en vez de <CallControls />: la del SDK incluye reacciones,
+        compartir pantalla y grabar, que no aplican a una consulta médica —
+        grabar además tiene implicaciones de consentimiento. Se arma con los
+        mismos botones oficiales, así que conservan estado y accesibilidad.
+      */}
+      <Flex
+        justify="center"
+        align="center"
+        gap={token.margin}
+        style={{ padding: token.padding, background: "rgba(0,0,0,0.85)" }}
+      >
+        <ToggleAudioPublishingButton />
+        <ToggleVideoPublishingButton />
+        <ToggleAudioOutputButton />
+        <CancelCallButton onLeave={alSalir} />
       </Flex>
     </Flex>
   );
