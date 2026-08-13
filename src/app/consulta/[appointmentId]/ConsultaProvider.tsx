@@ -7,7 +7,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { StreamVideo, StreamVideoClient, type Call } from "@stream-io/video-react-sdk";
+import {
+  StreamTheme,
+  StreamVideo,
+  StreamVideoClient,
+  type Call,
+} from "@stream-io/video-react-sdk";
 import "@stream-io/video-react-sdk/dist/css/styles.css";
 
 /**
@@ -147,7 +152,20 @@ export function ConsultaProvider({
 
   return (
     <ContextoConsulta.Provider value={{ cargando, error, acceso, call }}>
-      {client ? <StreamVideo client={client}>{children}</StreamVideo> : children}
+      {/*
+        StreamTheme es obligatorio: TODO el CSS del SDK cuelga de la clase
+        `.str-video` que este componente aplica. Sin él la hoja de estilos se
+        carga pero no alcanza a nada, y los componentes salen crudos —texto
+        negro sobre fondo negro, avatares sin forma y controles diminutos.
+        La jerarquía es StreamVideo -> StreamTheme -> StreamCall.
+      */}
+      {client ? (
+        <StreamVideo client={client}>
+          <StreamTheme style={{ height: "100%" }}>{children}</StreamTheme>
+        </StreamVideo>
+      ) : (
+        children
+      )}
     </ContextoConsulta.Provider>
   );
 }
