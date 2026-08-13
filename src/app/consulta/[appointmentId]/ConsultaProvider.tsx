@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  StreamI18nProvider,
   StreamTheme,
   StreamVideo,
   StreamVideoClient,
@@ -16,6 +17,7 @@ import {
 import "@stream-io/video-react-sdk/dist/css/styles.css";
 // Después de la del SDK a propósito: estos ajustes tienen que ganarle.
 import "./consulta.css";
+import { TRADUCCIONES_VIDEO } from "./traducciones";
 
 /**
  * Contexto de una consulta en línea.
@@ -162,9 +164,13 @@ export function ConsultaProvider({
         La jerarquía es StreamVideo -> StreamTheme -> StreamCall.
       */}
       {client ? (
-        <StreamVideo client={client}>
-          <StreamTheme style={{ height: "100%" }}>{children}</StreamTheme>
-        </StreamVideo>
+        // El SDK sólo trae inglés: el mapa en español va por
+        // translationsOverrides, que es su mecanismo oficial.
+        <StreamI18nProvider language="es" translationsOverrides={TRADUCCIONES_VIDEO}>
+          <StreamVideo client={client}>
+            <StreamTheme style={{ height: "100%" }}>{children}</StreamTheme>
+          </StreamVideo>
+        </StreamI18nProvider>
       ) : (
         children
       )}

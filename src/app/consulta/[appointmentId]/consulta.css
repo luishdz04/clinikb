@@ -138,10 +138,60 @@
   font-weight: 600;
 }
 
-/* Separadores y barra de nivel del micrófono. */
+/* Separadores. */
 .str-video__device-settings hr,
 .str-video__device-settings__device-kind + .str-video__device-settings__device-kind {
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+/*
+ * Los nombres de dispositivo son largos ("Comunicaciones - Micrófono (Logi
+ * C270 HD WebCam) (046d:0825)") y se salían de la fila. Se acotan con puntos
+ * suspensivos y el nombre completo queda en el title del elemento.
+ */
+.str-video__device-settings .str-video__option label,
+.str-video__device-settings .str-video__option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.str-video__device-settings {
+  min-width: 300px;
+  max-width: 420px;
+}
+
+/* El radio también toma el color de marca cuando está elegido. */
+.str-video__device-settings input[type="radio"] {
+  accent-color: #55c5c4;
+  flex: 0 0 auto;
+}
+
+.str-video__device-settings .str-video__option:has(input:checked) input[type="radio"] {
+  accent-color: #060807;
+}
+
+/* Barra de nivel del micrófono: que se lea sobre el fondo turquesa. */
+.str-video__device-settings .str-video__audio-input-device-selector__level,
+.str-video__device-settings progress,
+.str-video__device-settings meter {
+  accent-color: #55c5c4;
+}
+
+/* Botón de probar bocina: acción, no una opción más de la lista. */
+.str-video__device-settings button {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+  width: 100%;
+  transition: background-color 0.15s;
+}
+
+.str-video__device-settings button:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 
 /*
