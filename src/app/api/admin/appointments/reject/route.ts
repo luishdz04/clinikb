@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
 import { getAppointmentRejectedEmailHTML } from "@/lib/email/approval-emails";
+import { eliminarEventoDeCita } from "@/lib/google/citas";
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,6 +61,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Si ya se había generado la sala, se elimina el evento del calendario.
+    await eliminarEventoDeCita(appointment_id);
 
     // Enviar email al paciente notificando el rechazo
     try {

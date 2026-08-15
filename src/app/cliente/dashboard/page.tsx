@@ -66,9 +66,14 @@ interface Cita {
   start_time: string;
   status: string;
   modality?: string | null;
+  google_meet_url?: string | null;
+  meeting_link?: string | null;
   service?: { title?: string } | null;
   doctor?: { full_name?: string } | null;
 }
+
+/** El enlace vive en `google_meet_url`; `meeting_link` cubre las citas viejas. */
+const enlaceDeMeet = (c: Cita) => c.google_meet_url || c.meeting_link || null;
 
 async function obtenerDatos(): Promise<{ paciente: Paciente; citas: Cita[] }> {
   const [resMe, resCitas] = await Promise.all([
@@ -209,13 +214,28 @@ export default function DashboardPacientePage() {
                   />
                 )}
 
-                {proxima.status === "confirmed" && proxima.modality === "online" && (
-                  <Link href={`/consulta/${proxima.id}/lobby`}>
-                    <Button type="primary" icon={<VideoCameraOutlined />} size="large" block>
+                {proxima.status === "confirmed" &&
+                  proxima.modality === "online" &&
+                  (enlaceDeMeet(proxima) ? (
+                    <Button
+                      type="primary"
+                      icon={<VideoCameraOutlined />}
+                      size="large"
+                      block
+                      href={enlaceDeMeet(proxima)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
                       Entrar a la consulta
                     </Button>
-                  </Link>
-                )}
+                  ) : (
+                    <Alert
+                      type="info"
+                      showIcon
+                      title="Estamos preparando tu sala"
+                      description="El enlace de la videollamada aparecerá aquí y te llegará por correo."
+                    />
+                  ))}
               </Flex>
             ) : (
               <Empty

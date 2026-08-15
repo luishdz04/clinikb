@@ -40,7 +40,6 @@ import {
 import dayjs, { type Dayjs } from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import "dayjs/locale/es";
-import Link from "next/link";
 
 dayjs.extend(customParseFormat);
 dayjs.locale("es");
@@ -96,12 +95,17 @@ interface Cita {
   end_time: string;
   status: string;
   modality?: string | null;
+  google_meet_url?: string | null;
+  meeting_link?: string | null;
   patient_notes?: string | null;
   rejection_reason?: string | null;
   cancellation_reason?: string | null;
   service?: { title?: string } | null;
   doctor?: { full_name?: string } | null;
 }
+
+/** El enlace vive en `google_meet_url`; `meeting_link` cubre las citas viejas. */
+const enlaceDeMeet = (c: Cita) => c.google_meet_url || c.meeting_link || null;
 
 async function obtenerCitas(): Promise<Cita[]> {
   const res = await fetch("/api/patient/appointments");
@@ -350,11 +354,16 @@ export default function CitasPacientePage() {
           <Tooltip title="Ver detalle">
             <Button size="small" icon={<EyeOutlined />} onClick={() => setDetalle(r)} />
           </Tooltip>
-          {r.status === "confirmed" && r.modality === "online" && (
+          {r.status === "confirmed" && r.modality === "online" && enlaceDeMeet(r) && (
             <Tooltip title="Entrar a la consulta">
-              <Link href={`/consulta/${r.id}/lobby`}>
-                <Button size="small" type="primary" icon={<VideoCameraOutlined />} />
-              </Link>
+              <Button
+                size="small"
+                type="primary"
+                icon={<VideoCameraOutlined />}
+                href={enlaceDeMeet(r)!}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
             </Tooltip>
           )}
         </Space>

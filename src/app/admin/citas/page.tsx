@@ -78,6 +78,9 @@ const MODALIDADES: Record<string, { texto: string; color: string }> = {
   presencial: { texto: "Presencial", color: "green" },
 };
 
+/** El enlace vive en `google_meet_url`; `meeting_link` cubre las citas viejas. */
+const enlaceDeMeet = (c: Cita) => c.google_meet_url || c.meeting_link || null;
+
 interface Cita {
   id: string;
   appointment_date: string;
@@ -88,6 +91,7 @@ interface Cita {
   patient_notes?: string | null;
   doctor_notes?: string | null;
   meeting_link?: string | null;
+  google_meet_url?: string | null;
   rejection_reason?: string | null;
   cancellation_reason?: string | null;
   patient?: { full_name?: string; email?: string; phone?: string } | null;
@@ -325,11 +329,16 @@ export default function CitasPage() {
 
           {r.status === "confirmed" && (
             <>
-              {r.modality === "online" && (
-                <Tooltip title="Entrar a la consulta">
-                  <Link href={`/consulta/${r.id}/lobby`} target="_blank">
-                    <Button size="small" type="primary" icon={<VideoCameraOutlined />} />
-                  </Link>
+              {r.modality === "online" && enlaceDeMeet(r) && (
+                <Tooltip title="Entrar a la consulta en Google Meet">
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<VideoCameraOutlined />}
+                    href={enlaceDeMeet(r)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
                 </Tooltip>
               )}
               <Tooltip title="Marcar como completada">

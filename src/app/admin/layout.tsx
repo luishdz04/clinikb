@@ -22,6 +22,7 @@ import {
   MedicineBoxOutlined,
   MenuOutlined,
   ScheduleOutlined,
+  ApiOutlined,
   SettingOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
@@ -80,6 +81,9 @@ function itemsDelMenu(esAdmin: boolean): MenuProps["items"] {
       ? [{ key: "/admin/servicios", icon: <SettingOutlined />, label: "Servicios" }]
       : []),
     ...(ITEMS_COMUNES ?? []),
+    ...(esAdmin
+      ? [{ key: "/admin/configuracion", icon: <ApiOutlined />, label: "Configuración" }]
+      : []),
   ];
 }
 

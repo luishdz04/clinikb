@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
 import { getAppointmentApprovedEmailHTML } from "@/lib/email/approval-emails";
-import { crearSalaDeConsulta } from "@/lib/video/sala";
+import { sincronizarEventoDeCita } from "@/lib/google/citas";
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,28 +53,6 @@ export async function POST(request: NextRequest) {
     const endMins = endMinutes % 60;
     const calculatedEndTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
 
-    // Si es cita online, crear sala de videollamada si no existe
-    let meetingLink = appointment.meeting_link;
-    if (appointment.modality === 'online' && !meetingLink) {
-      try {
-        // Llamada directa, no por HTTP contra la propia app: aquí ya estamos
-        // en el servidor con permisos, y una petición interna no lleva
-        // cookies, así que fallaría la autenticación del endpoint.
-        const sala = await crearSalaDeConsulta(
-          appointmentId,
-          `doctor-${appointment.doctor_id}`,
-        );
-        if (sala.ok) {
-          meetingLink = sala.meetingLink;
-        } else {
-          console.error("No se pudo crear la sala:", sala.error);
-        }
-      } catch (error) {
-        console.error("Error creating video room:", error);
-        // Continuar sin sala, se puede crear después
-      }
-    }
-
     // Actualizar fecha, hora y status a confirmed
     const { error: updateError } = await supabase
       .from("appointments")
@@ -94,6 +72,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Mueve el evento existente en vez de crear otro: así el paciente conserva
+    // el mismo enlace de Meet que ya recibió.
+    const { meetUrl } = await sincronizarEventoDeCita(appointmentId);
+
     // Enviar email al paciente con la nueva fecha
     try {
       const emailHTML = getAppointmentApprovedEmailHTML(
@@ -109,6 +91,7 @@ export async function POST(request: NextRequest) {
           time: newTime,
           doctor: appointment.doctor.full_name,
           modality: appointment.modality || "Presencial",
+          meetUrl,
         }
       );
 

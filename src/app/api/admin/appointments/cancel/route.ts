@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { eliminarEventoDeCita } from "@/lib/google/citas";
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
     const body = await request.json();
     const { appointment_id, cancellation_reason } = body;
+
+    const supabase = createAdminClient();
+
+    // Los doctores no viven en Supabase Auth, así que el cliente anónimo no
+    // pasa las políticas de la tabla: aquí hace falta el cliente de servicio.
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Error de configuración del servidor" },
+        { status: 500 }
+      );
+    }
 
     if (!appointment_id || !cancellation_reason) {
       return NextResponse.json(
@@ -48,6 +59,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Quita el evento del calendario y avisa a los invitados.
+    await eliminarEventoDeCita(appointment_id);
 
     // TODO: Enviar email al paciente notificando la cancelación
 
