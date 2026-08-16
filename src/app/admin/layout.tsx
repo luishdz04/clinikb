@@ -25,6 +25,7 @@ import {
   ApiOutlined,
   SettingOutlined,
   TeamOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { usePathname, useRouter } from "next/navigation";
 import type { MenuProps } from "antd";
@@ -71,6 +72,7 @@ const ITEMS_COMUNES: MenuProps["items"] = [
   { key: "/admin/horarios", icon: <ClockCircleOutlined />, label: "Horarios" },
   { key: "/admin/citas", icon: <ScheduleOutlined />, label: "Citas" },
   { key: "/admin/historial", icon: <FileTextOutlined />, label: "Historial Clínico" },
+  { key: "/admin/perfil", icon: <UserOutlined />, label: "Mi Perfil" },
 ];
 
 /** El catálogo de servicios sólo lo administra quien tiene rol admin. */
@@ -172,6 +174,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const items = useMemo(() => itemsDelMenu(doctor?.role === "admin"), [doctor?.role]);
 
   const menuUsuario: MenuProps["items"] = [
+    {
+      key: "perfil",
+      icon: <UserOutlined />,
+      label: "Mi Perfil",
+      onClick: () => router.push("/admin/perfil"),
+    },
+    { type: "divider" },
     {
       key: "logout",
       icon: <LogoutOutlined />,
