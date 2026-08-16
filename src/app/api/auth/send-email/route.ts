@@ -9,8 +9,8 @@ import { sendEmail } from '@/lib/email/send';
  *
  * Cuando Auth necesita mandar un correo, en vez de enviarlo él llama a este
  * endpoint con el token ya generado. Nosotros lo renderizamos con React Email
- * y lo enviamos por Resend, que es lo que nos permite usar plantilla propia y
- * el dominio verificado.
+ * y lo enviamos desde el buzón de la clínica, que es lo que nos permite usar
+ * plantilla propia en vez del correo genérico de Supabase.
  *
  * Auth sigue siendo el dueño del código: lo genera, lo expira (Auth >
  * Providers > Email > OTP Expiration) y lo valida en `verifyOtp`. Aquí no se

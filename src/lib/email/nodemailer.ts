@@ -1,5 +1,5 @@
 /**
- * El envío ya NO va por SMTP: pasó a Resend (ver `@/lib/email/send`).
+ * El envío ya NO va por SMTP: pasó a la API de Hostinger (ver `@/lib/email/send`).
  *
  * Se reexporta aquí para no tocar los archivos que ya importaban `sendEmail`
  * desde esta ruta. Para código nuevo, importa directo de `@/lib/email/send`.
