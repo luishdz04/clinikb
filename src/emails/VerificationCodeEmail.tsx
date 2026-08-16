@@ -1,28 +1,21 @@
-import {
-  Body,
-  Container,
-  Head,
-  Heading,
-  Hr,
-  Html,
-  Preview,
-  Section,
-  Text,
-} from "@react-email/components";
-import * as React from "react";
+import { Heading, Hr, Section, Text } from "@react-email/components";
+import { CorreoBase } from "./componentes/CorreoBase";
 
 interface VerificationCodeEmailProps {
-  /** Código numérico que genera Supabase Auth (largo según Email OTP Length). */
+  /** Código que genera Supabase Auth (largo según Email OTP Length). */
   token: string;
   /** Nombre del paciente, si Auth lo trae en su metadata. */
   fullName?: string;
-  /** Minutos de vigencia del código (Auth > Providers > Email > OTP Expiration). */
+  /** Minutos de vigencia (Auth > Providers > Email > OTP Expiration). */
   expiresInMinutes?: number;
 }
 
 /**
- * Correo de verificación de alta. Deliberadamente NO incluye datos clínicos ni
- * personales más allá del nombre: el correo no es un canal confidencial.
+ * Verificación de alta.
+ *
+ * A propósito no lleva datos clínicos ni personales más allá del nombre: el
+ * correo no es un canal confidencial y este mensaje viaja antes de que la
+ * cuenta exista siquiera.
  */
 export function VerificationCodeEmail({
   token,
@@ -30,135 +23,55 @@ export function VerificationCodeEmail({
   expiresInMinutes = 10,
 }: VerificationCodeEmailProps) {
   return (
-    <Html lang="es">
-      <Head />
-      <Preview>Tu código de verificación de CliniKB es {token}</Preview>
-      <Body style={body}>
-        <Container style={container}>
-          <Section style={header}>
-            <Heading style={headerTitle}>CliniKB</Heading>
-          </Section>
+    <CorreoBase vistaPrevia={`Tu código de verificación es ${token}`}>
+      <Heading as="h1" className="m-0 mb-[8px] text-[22px] font-bold text-tinta">
+        Confirma tu correo
+      </Heading>
 
-          <Section style={content}>
-            <Heading as="h2" style={title}>
-              Confirma tu correo
-            </Heading>
+      <Text className="m-0 mb-[24px] text-[15px] leading-[24px] text-[#4a5555]">
+        {fullName ? `Hola ${fullName}: para` : "Hola: para"} terminar tu registro en CliniKB,
+        escribe este código en la página donde te quedaste.
+      </Text>
 
-            <Text style={text}>
-              {fullName ? `Hola ${fullName}: ` : "Hola: "}
-              para terminar tu registro, escribe este código en la página donde te quedaste.
-            </Text>
+      <Section className="mb-[24px] rounded-[10px] border border-solid border-marca bg-[#eef8f8] px-[24px] py-[24px] text-center">
+        <Text className="m-0 mb-[8px] text-[12px] font-semibold uppercase tracking-[1px] text-marca-oscura">
+          Código de verificación
+        </Text>
+        <Text
+          className="m-0 text-[38px] font-bold leading-[46px] text-marca-profunda"
+          style={{ fontFamily: "'Courier New', Courier, monospace", letterSpacing: "10px" }}
+        >
+          {token}
+        </Text>
+        <Text className="m-0 mt-[8px] text-[12px] text-[#6b7676]">
+          Vigente por {expiresInMinutes} minutos
+        </Text>
+      </Section>
 
-            <Section style={codeBox}>
-              <Text style={code}>{token}</Text>
-            </Section>
+      <Text className="m-0 mb-[20px] text-[14px] leading-[22px] text-[#4a5555]">
+        En cuanto lo escribas, tu cuenta queda activa y podrás iniciar sesión para agendar
+        tus citas. Si se te pasa el tiempo, puedes pedir un código nuevo desde la misma
+        página.
+      </Text>
 
-            <Text style={muted}>
-              El código vence en {expiresInMinutes} minutos. Si se te pasa el tiempo, puedes
-              pedir uno nuevo desde la misma página.
-            </Text>
+      <Hr className="my-[24px] border-0 border-t border-solid border-[#e3e8e8]" />
 
-            <Hr style={hr} />
-
-            <Text style={muted}>
-              Si tú no solicitaste este registro, ignora este mensaje: sin el código la
-              cuenta no se activa y nadie podrá usarla.
-            </Text>
-
-            <Text style={notice}>
-              En cuanto escribas el código, tu cuenta queda activa y podrás iniciar sesión
-              para agendar tus citas.
-            </Text>
-          </Section>
-
-          <Section style={footer}>
-            <Text style={footerText}>
-              CliniKB · Este correo se envió de forma automática.
-            </Text>
-          </Section>
-        </Container>
-      </Body>
-    </Html>
+      {/* Aviso al estilo de la banca: nadie de la clínica pide este código. */}
+      <Section className="rounded-[8px] border-0 border-l-[3px] border-solid border-oro bg-[#fdf8ef] px-[16px] py-[14px]">
+        <Text className="m-0 text-[13px] leading-[20px] text-[#5b5035]">
+          <strong>Nadie de CliniKB te va a pedir este código</strong> por teléfono, WhatsApp
+          ni correo. Si tú no solicitaste el registro, ignora este mensaje: sin el código la
+          cuenta no se activa.
+        </Text>
+      </Section>
+    </CorreoBase>
   );
 }
 
 export default VerificationCodeEmail;
 
-// Colores espejo de src/theme/themeConfig.ts. Van en línea y hardcodeados
-// porque los clientes de correo no soportan variables CSS ni hojas externas.
-const MARCA = "#55c5c4";
-const MARCA_PROFUNDA = "#2b6068";
-const TINTA = "#060807";
-
-const body = {
-  backgroundColor: "#f5f5f5",
-  fontFamily:
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-  margin: 0,
-  padding: "24px 0",
-};
-
-const container = {
-  backgroundColor: "#ffffff",
-  borderRadius: "8px",
-  margin: "0 auto",
-  maxWidth: "600px",
-  overflow: "hidden" as const,
-};
-
-const header = {
-  backgroundColor: MARCA_PROFUNDA,
-  padding: "32px 24px",
-  textAlign: "center" as const,
-};
-
-const headerTitle = {
-  color: "#ffffff",
-  fontSize: "28px",
-  fontWeight: "bold",
-  letterSpacing: "1px",
-  margin: 0,
-};
-
-const content = { padding: "32px 32px 8px" };
-
-const title = { color: TINTA, fontSize: "20px", margin: "0 0 16px" };
-
-const text = { color: "#333333", fontSize: "15px", lineHeight: "24px", margin: "0 0 24px" };
-
-const codeBox = {
-  backgroundColor: "#f4fbfb",
-  border: `2px solid ${MARCA}`,
-  borderRadius: "8px",
-  margin: "0 0 24px",
-  padding: "20px",
-  textAlign: "center" as const,
-};
-
-const code = {
-  color: MARCA_PROFUNDA,
-  fontFamily: "'Courier New', Courier, monospace",
-  fontSize: "36px",
-  fontWeight: "bold",
-  letterSpacing: "10px",
-  lineHeight: "40px",
-  margin: 0,
-};
-
-const muted = { color: "#767676", fontSize: "13px", lineHeight: "20px", margin: "0 0 16px" };
-
-const notice = {
-  backgroundColor: "#fdf8ef",
-  borderLeft: "4px solid #dfc79c",
-  color: "#5b5035",
-  fontSize: "13px",
-  lineHeight: "20px",
-  margin: "0 0 8px",
-  padding: "12px 16px",
-};
-
-const hr = { borderColor: "#eaeaea", margin: "24px 0" };
-
-const footer = { padding: "16px 32px 32px" };
-
-const footerText = { color: "#9a9a9a", fontSize: "12px", margin: 0, textAlign: "center" as const };
+VerificationCodeEmail.PreviewProps = {
+  token: "418620",
+  fullName: "Luis Diego De Luna",
+  expiresInMinutes: 10,
+} satisfies VerificationCodeEmailProps;

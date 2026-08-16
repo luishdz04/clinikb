@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/email/nodemailer";
-import { getAppointmentConfirmationEmailHTML, getAdminAppointmentNotificationEmailHTML } from "@/lib/email/appointment-emails";
-import dayjs from "dayjs";
+import { sendEmail } from "@/lib/email/send";
+import { correoSolicitudRecibida, correoAvisoInterno, fechaLegible, sitio } from "@/lib/email/plantillas";
 
 export async function POST(request: Request) {
   try {
@@ -129,13 +128,14 @@ export async function POST(request: Request) {
       
       await sendEmail({
         to: patient.email,
-        subject: "Solicitud de cita recibida - CliniKB",
-        html: getAppointmentConfirmationEmailHTML(patient.full_name || "Paciente", {
-          service: serviceData?.title || "Consulta",
-          date: dayjs(slot.slot_date).format("DD/MM/YYYY"),
-          time: `${formattedStartTime} - ${formattedEndTime}`,
-          doctor: doctorData?.full_name || "Profesional de CliniKB",
-          modality: slot.modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
+        subject: "Apartamos tu horario · CliniKB",
+        html: await correoSolicitudRecibida({
+          nombrePaciente: patient.full_name || "Paciente",
+          servicio: serviceData?.title || "Consulta",
+          enLinea: slot.modality === 'online',
+          fechaPreferida: fechaLegible(slot.slot_date),
+          horaPreferida: `${formattedStartTime} - ${formattedEndTime}`,
+          horarioReservado: true,
         }),
       });
       console.log("Confirmation email sent to:", patient.email, "- Name:", patient.full_name);
@@ -150,25 +150,24 @@ export async function POST(request: Request) {
       if (adminEmail) {
         const formattedStartTime = slot.start_time.substring(0, 5);
         const formattedEndTime = slot.end_time.substring(0, 5);
-        const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        const dashboardUrl = `${origin}/admin/citas`;
-
         await sendEmail({
           to: adminEmail,
-          subject: `Nueva cita reservada - ${patient.full_name}`,
-          html: getAdminAppointmentNotificationEmailHTML(
-            patient.full_name || "Paciente",
-            patient.email,
-            {
-              service: serviceData?.title || "Consulta",
-              date: dayjs(slot.slot_date).format("DD/MM/YYYY"),
-              time: `${formattedStartTime} - ${formattedEndTime}`,
-              doctor: doctorData?.full_name || "Profesional de CliniKB",
-              modality: slot.modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
-              notes: undefined,
-            },
-            dashboardUrl
-          ),
+          subject: `Nueva cita reservada: ${patient.full_name}`,
+          html: await correoAvisoInterno({
+            titulo: "Nueva cita reservada",
+            resumen: `${patient.full_name || "Un paciente"} apartó un horario y está esperando confirmación.`,
+            datos: [
+              { etiqueta: "Paciente", valor: patient.full_name || "Paciente" },
+              { etiqueta: "Correo", valor: patient.email },
+              { etiqueta: "Servicio", valor: serviceData?.title || "Consulta" },
+              { etiqueta: "Fecha", valor: fechaLegible(slot.slot_date) },
+              { etiqueta: "Hora", valor: `${formattedStartTime} - ${formattedEndTime}` },
+              { etiqueta: "Doctor", valor: doctorData?.full_name || "Por asignar" },
+              { etiqueta: "Modalidad", valor: slot.modality === 'online' ? "En línea" : "Presencial" },
+            ],
+            enlace: `${sitio()}/admin/citas`,
+            textoEnlace: "Ver la cita",
+          }),
         });
         console.log("Admin notification sent to:", adminEmail);
       }

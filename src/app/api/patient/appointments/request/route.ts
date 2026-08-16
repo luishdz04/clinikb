@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/email/nodemailer";
-import { getAppointmentRequestEmailHTML, getAdminAppointmentNotificationEmailHTML } from "@/lib/email/appointment-emails";
-import dayjs from "dayjs";
+import { sendEmail } from "@/lib/email/send";
+import { correoSolicitudRecibida, correoAvisoInterno, fechaLegible, sitio } from "@/lib/email/plantillas";
 
 export async function POST(request: Request) {
   try {
@@ -152,13 +151,14 @@ export async function POST(request: Request) {
     try {
       await sendEmail({
         to: patient.email,
-        subject: "Solicitud de Cita Recibida - CliniKB",
-        html: getAppointmentRequestEmailHTML(patient.full_name || "Paciente", {
-          service: service.title,
-          modality: modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
-          preferredDate: preferred_date ? dayjs(preferred_date).format("DD/MM/YYYY") : undefined,
-          preferredTime: preferred_time || undefined,
-          notes: patient_notes || undefined,
+        subject: "Recibimos tu solicitud de cita · CliniKB",
+        html: await correoSolicitudRecibida({
+          nombrePaciente: patient.full_name || "Paciente",
+          servicio: service.title,
+          enLinea: modality === 'online',
+          fechaPreferida: preferred_date ? fechaLegible(preferred_date) : undefined,
+          horaPreferida: preferred_time || undefined,
+          notas: patient_notes || undefined,
         }),
       });
       console.log("Request confirmation email sent to:", patient.email);
@@ -171,9 +171,6 @@ export async function POST(request: Request) {
     try {
       const adminEmail = process.env.ADMIN_EMAIL;
       if (adminEmail) {
-        const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        const dashboardUrl = `${origin}/admin/dashboard`;
-
         // Obtener nombre del doctor
         const { data: doctorData } = await supabase
           .from("doctors")
@@ -183,20 +180,23 @@ export async function POST(request: Request) {
 
         await sendEmail({
           to: adminEmail,
-          subject: ` Nueva Solicitud de Cita - ${patient.full_name}`,
-          html: getAdminAppointmentNotificationEmailHTML(
-            patient.full_name || "Paciente",
-            patient.email,
-            {
-              service: service.title,
-              date: preferred_date ? dayjs(preferred_date).format("DD/MM/YYYY") : "Por definir",
-              time: preferred_time || "Por definir",
-              doctor: doctorData?.full_name || "Por asignar",
-              modality: modality === 'online' ? 'En línea (videollamada)' : 'Presencial',
-              notes: patient_notes,
-            },
-            dashboardUrl
-          ),
+          subject: `Nueva solicitud de cita: ${patient.full_name}`,
+          html: await correoAvisoInterno({
+            titulo: "Nueva solicitud de cita",
+            resumen: `${patient.full_name || "Un paciente"} pidió una cita y está esperando confirmación.`,
+            datos: [
+              { etiqueta: "Paciente", valor: patient.full_name || "Paciente" },
+              { etiqueta: "Correo", valor: patient.email },
+              { etiqueta: "Servicio", valor: service.title },
+              { etiqueta: "Fecha preferida", valor: preferred_date ? fechaLegible(preferred_date) : "Por definir" },
+              { etiqueta: "Hora preferida", valor: preferred_time || "Por definir" },
+              { etiqueta: "Doctor", valor: doctorData?.full_name || "Por asignar" },
+              { etiqueta: "Modalidad", valor: modality === 'online' ? "En línea" : "Presencial" },
+              ...(patient_notes ? [{ etiqueta: "Notas del paciente", valor: patient_notes }] : []),
+            ],
+            enlace: `${sitio()}/admin/citas`,
+            textoEnlace: "Ver la solicitud",
+          }),
         });
         console.log("Admin notification sent to:", adminEmail);
       }

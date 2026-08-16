@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { sendEmail, getApprovalEmailHTML } from '@/lib/email/nodemailer';
+import { sendEmail } from '@/lib/email/send';
+import { correoCuentaLista, sitio } from '@/lib/email/plantillas';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,13 +77,14 @@ export async function POST(request: Request) {
 
     // Enviar email de aprobación
     try {
-      const origin = request.headers.get('origin') || 'http://localhost:3000';
-      const loginUrl = `${origin}/login/paciente`;
-      const html = getApprovalEmailHTML(patient.full_name, loginUrl);
+      const html = await correoCuentaLista({
+        nombrePaciente: patient.full_name,
+        urlAcceso: `${sitio()}/login`,
+      });
 
       await sendEmail({
         to: patient.email,
-        subject: '¡Tu cuenta en CliniKB ha sido aprobada!',
+        subject: 'Tu cuenta de CliniKB ya está lista',
         html,
       });
 

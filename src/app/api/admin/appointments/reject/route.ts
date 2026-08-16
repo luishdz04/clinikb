@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
-import { getAppointmentRejectedEmailHTML } from "@/lib/email/approval-emails";
+import { correoCitaRechazada, fechaLegible, horaLegible } from "@/lib/email/plantillas";
 import { eliminarEventoDeCita } from "@/lib/google/citas";
 
 export async function POST(request: NextRequest) {
@@ -67,24 +67,17 @@ export async function POST(request: NextRequest) {
 
     // Enviar email al paciente notificando el rechazo
     try {
-      const emailHTML = getAppointmentRejectedEmailHTML(
-        appointment.patient.full_name,
-        {
-          service: appointment.service.title,
-          date: new Date(appointment.appointment_date).toLocaleDateString("es-ES", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }),
-          time: appointment.start_time,
-        },
-        rejection_reason
-      );
+      const emailHTML = await correoCitaRechazada({
+        nombrePaciente: appointment.patient.full_name,
+        servicio: appointment.service.title,
+        fecha: fechaLegible(appointment.appointment_date),
+        hora: horaLegible(appointment.start_time),
+        motivo: rejection_reason,
+      });
 
       await sendEmail({
         to: appointment.patient.email,
-        subject: "📅 Actualización sobre tu solicitud de cita - CliniKB",
+        subject: "Sobre tu solicitud de cita · CliniKB",
         html: emailHTML,
       });
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
-import { getAppointmentApprovedEmailHTML } from "@/lib/email/approval-emails";
+import { correoCitaConfirmada, fechaLegible, horaLegible } from "@/lib/email/plantillas";
 import { sincronizarEventoDeCita } from "@/lib/google/citas";
 
 export async function POST(request: NextRequest) {
@@ -64,26 +64,19 @@ export async function POST(request: NextRequest) {
 
     // Enviar email al paciente
     try {
-      const emailHTML = getAppointmentApprovedEmailHTML(
-        appointment.patient.full_name,
-        {
-          service: appointment.service.title,
-          date: new Date(appointment.appointment_date).toLocaleDateString("es-ES", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }),
-          time: appointment.start_time,
-          doctor: appointment.doctor.full_name,
-          modality: appointment.modality || "Presencial",
-          meetUrl,
-        }
-      );
+      const emailHTML = await correoCitaConfirmada({
+        nombrePaciente: appointment.patient.full_name,
+        servicio: appointment.service.title,
+        fecha: fechaLegible(appointment.appointment_date),
+        hora: horaLegible(appointment.start_time),
+        doctor: appointment.doctor.full_name,
+        enLinea: appointment.modality === "online",
+        enlaceMeet: meetUrl,
+      });
 
       await sendEmail({
         to: appointment.patient.email,
-        subject: "✅ Tu cita ha sido confirmada - CliniKB",
+        subject: "Tu cita está confirmada · CliniKB",
         html: emailHTML,
       });
 

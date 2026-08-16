@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/send";
-import { getAppointmentApprovedEmailHTML } from "@/lib/email/approval-emails";
+import { correoCitaConfirmada, fechaLegible, horaLegible } from "@/lib/email/plantillas";
 import { sincronizarEventoDeCita } from "@/lib/google/citas";
 
 export async function POST(request: NextRequest) {
@@ -78,26 +78,20 @@ export async function POST(request: NextRequest) {
 
     // Enviar email al paciente con la nueva fecha
     try {
-      const emailHTML = getAppointmentApprovedEmailHTML(
-        appointment.patient.full_name,
-        {
-          service: appointment.service.title,
-          date: new Date(newDate).toLocaleDateString("es-ES", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }),
-          time: newTime,
-          doctor: appointment.doctor.full_name,
-          modality: appointment.modality || "Presencial",
-          meetUrl,
-        }
-      );
+      const emailHTML = await correoCitaConfirmada({
+        nombrePaciente: appointment.patient.full_name,
+        servicio: appointment.service.title,
+        fecha: fechaLegible(newDate),
+        hora: horaLegible(newTime),
+        doctor: appointment.doctor.full_name,
+        enLinea: appointment.modality === "online",
+        enlaceMeet: meetUrl,
+        reprogramada: true,
+      });
 
       await sendEmail({
         to: appointment.patient.email,
-        subject: "✅ Tu cita ha sido confirmada (con nueva fecha) - CliniKB",
+        subject: "Tu cita cambió de horario · CliniKB",
         html: emailHTML,
       });
 

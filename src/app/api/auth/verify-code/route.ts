@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createAuthAnonClient, traducirErrorAuth } from '@/lib/supabase/auth-anon';
 import { sendEmail } from '@/lib/email/send';
-import { getNewRegistrationEmailHTML } from '@/lib/email/registration-notification';
+import { correoAvisoInterno, sitio } from '@/lib/email/plantillas';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,18 +64,22 @@ export async function POST(request: Request) {
 
     if (patient) {
       try {
-        const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || '';
         const adminEmail = process.env.ADMIN_EMAIL;
 
         if (adminEmail) {
           await sendEmail({
             to: adminEmail,
-            subject: `CliniKB - Nuevo paciente registrado: ${patient.full_name}`,
-            html: getNewRegistrationEmailHTML(
-              patient.full_name,
-              patient.email,
-              `${origin}/admin/dashboard`
-            ),
+            subject: `Nuevo paciente registrado: ${patient.full_name}`,
+            html: await correoAvisoInterno({
+              titulo: 'Nuevo paciente registrado',
+              resumen: `${patient.full_name} completó su registro y ya puede agendar.`,
+              datos: [
+                { etiqueta: 'Paciente', valor: patient.full_name },
+                { etiqueta: 'Correo', valor: patient.email },
+              ],
+              enlace: `${sitio()}/admin/pacientes`,
+              textoEnlace: 'Ver su expediente',
+            }),
             // Un solo aviso por paciente aunque se reintente la petición.
             idempotencyKey: `nuevo-registro/${patient.id}`,
           });
