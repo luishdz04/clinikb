@@ -1,30 +1,32 @@
 import 'server-only';
-import { Resend } from 'resend';
+import { Configuration, SendApi, type V1SendRequest } from 'hostinger-mail-api-sdk';
+import { isAxiosError } from 'axios';
 
 /**
  * Único punto de salida de correo de la app.
  *
- * Antes esto iba por SMTP con nodemailer. Se cambió a Resend por dos razones:
- * el sitio corre en funciones serverless de Netlify, donde SMTP es frágil
- * (puertos bloqueados, conexiones frías, timeouts), y el dominio está
- * verificado en Resend con SPF + DKIM, que es lo que mantiene los correos
- * fuera de spam.
+ * Historia: SMTP con nodemailer -> Resend -> API de correo de Hostinger.
+ * El cambio a Hostinger vino de tener ya los buzones reales del dominio
+ * (`administracion@`, `psicologia@`, …): el correo automático sale del mismo
+ * buzón que atiende la clínica, así que las respuestas de los pacientes caen
+ * donde alguien las va a leer, no en un remitente que no recibe.
+ *
+ * Dos diferencias contra Resend que conviene tener presentes:
+ *
+ *  - El remitente NO se elige por parámetro: es el buzón al que pertenece el
+ *    token. Por eso aquí no hay un `from`.
+ *  - Cada envío deja copia en la carpeta Enviados de ese buzón.
  */
 
-let cliente: Resend | null = null;
+const BASE = 'https://api.mail.hostinger.com';
 
-function getResend(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-  cliente ??= new Resend(apiKey);
+let cliente: SendApi | null = null;
+
+function getCliente(): SendApi | null {
+  const token = process.env.HOSTINGER_MAIL_TOKEN;
+  if (!token) return null;
+  cliente ??= new SendApi(new Configuration({ accessToken: token, basePath: BASE }));
   return cliente;
-}
-
-function remitente(): string {
-  const email = process.env.SMTP_FROM_EMAIL;
-  const nombre = process.env.SMTP_FROM_NAME || 'CliniKB';
-  if (!email) throw new Error('Falta SMTP_FROM_EMAIL');
-  return `${nombre} <${email}>`;
 }
 
 export interface EnviarCorreoParams {
@@ -32,47 +34,88 @@ export interface EnviarCorreoParams {
   subject: string;
   html: string;
   /**
-   * Evita duplicados si la petición se reintenta. Formato `<evento>/<id>`.
-   * Con la misma clave y el mismo contenido, Resend no reenvía.
+   * Se conserva por compatibilidad con quien ya lo pasaba, pero la API de
+   * Hostinger no tiene idempotencia. Si Supabase reintenta el hook, el
+   * paciente puede recibir el mismo correo dos veces —con el mismo código,
+   * no con uno nuevo—, así que es molesto pero no rompe el registro.
    */
   idempotencyKey?: string;
 }
 
-/**
- * Envía un correo. Devuelve el id de Resend o lanza con un mensaje útil.
- *
- * Ojo: el SDK de Resend NO lanza excepciones ante errores de la API, devuelve
- * `{ data, error }`. Hay que revisar `error` a mano.
- */
-export async function sendEmail({ to, subject, html, idempotencyKey }: EnviarCorreoParams) {
-  const resend = getResend();
+/** Versión legible del HTML para los clientes que no lo muestran. */
+function aTextoPlano(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<br\s*\/?>|<\/(p|div|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
-  if (!resend) {
-    // No se rompe el flujo de negocio por una variable sin configurar: quien
-    // llama decide si el correo es crítico. Pero sí queda registrado.
-    console.error('[email] RESEND_API_KEY no configurada; no se envió:', subject);
+/** Saca el mensaje útil de un error de axios sin volcar el token en los logs. */
+function detalleDelError(error: unknown): string {
+  if (isAxiosError(error)) {
+    const cuerpo = error.response?.data;
+    const mensaje =
+      (typeof cuerpo === 'object' && cuerpo !== null && 'message' in cuerpo
+        ? String((cuerpo as { message: unknown }).message)
+        : null) ?? error.message;
+    return `${error.response?.status ?? 'sin estado'}: ${mensaje}`;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Envía un correo desde el buzón de la clínica.
+ *
+ * Lanza si falla. Quien llama decide si el correo es crítico: en las rutas de
+ * citas el envío va dentro de su propio try/catch para que un problema de
+ * correo no deshaga una cita ya confirmada.
+ */
+export async function sendEmail({ to, subject, html }: EnviarCorreoParams) {
+  const api = getCliente();
+  const buzon = process.env.HOSTINGER_MAILBOX_ID;
+
+  if (!api || !buzon) {
+    console.error(
+      '[email] Falta HOSTINGER_MAIL_TOKEN o HOSTINGER_MAILBOX_ID; no se envió:',
+      subject,
+    );
     throw new Error('El servicio de correo no está configurado');
   }
 
-  const replyTo = process.env.EMAIL_REPLY_TO;
+  const destinatarios = Array.isArray(to) ? to : [to];
 
-  const { data, error } = await resend.emails.send(
-    {
-      from: remitente(),
-      to: Array.isArray(to) ? to : [to],
-      subject,
-      html,
-      // El dominio aún no tiene MX: sin esto, las respuestas rebotan.
-      ...(replyTo ? { replyTo } : {}),
-    },
-    idempotencyKey ? { idempotencyKey } : undefined,
-  );
+  // Los tipos generados del SDK marcan TODOS los campos como obligatorios,
+  // contradiciendo su propia documentación ("At least one of to, cc, or bcc
+  // must be present"). Se manda sólo lo que la API necesita en vez de
+  // inventar un `inReplyTo` o un `forwardOf` vacíos, que sí tendrían efecto.
+  const cuerpo = {
+    to: destinatarios,
+    displayName: process.env.SMTP_FROM_NAME || 'CliniKB',
+    subject,
+    html,
+    // Alternativa en texto plano. No es adorno: un correo que sólo trae HTML
+    // puntúa peor en los filtros de spam.
+    text: aTextoPlano(html),
+  } as V1SendRequest;
 
-  if (error) {
-    console.error('[email] Resend rechazó el envío:', error.name, error.message);
-    throw new Error(`No se pudo enviar el correo: ${error.message}`);
+  try {
+    await api.sendEmail(buzon, cuerpo);
+  } catch (error) {
+    const detalle = detalleDelError(error);
+    console.error('[email] Hostinger rechazó el envío:', detalle);
+    throw new Error(`No se pudo enviar el correo: ${detalle}`);
   }
 
-  console.log('[email] enviado:', data?.id, '->', subject);
-  return data;
+  console.log('[email] enviado ->', subject, '->', destinatarios.join(', '));
+  return { to: destinatarios, subject };
 }
