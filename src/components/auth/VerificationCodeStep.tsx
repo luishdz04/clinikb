@@ -14,9 +14,15 @@ const SEGUNDOS_ENTRE_REENVIOS = 60;
  *
  * Tiene que coincidir con Supabase Dashboard -> Authentication -> Providers ->
  * Email -> Email OTP Length. Si no coinciden, la caja no deja escribir el
- * código completo y la verificación se vuelve imposible.
+ * código completo y la verificación se vuelve imposible: el paciente se queda
+ * atorado sin poder terminar el registro, y sin mensaje de error que lo
+ * explique.
+ *
+ * Por eso sale a variable de entorno en vez de quedarse escrito aquí: al
+ * cambiarlo en Supabase se cambia NEXT_PUBLIC_OTP_LENGTH y ya, en un solo
+ * lugar. Supabase sólo acepta de 6 a 10.
  */
-const LARGO_DEL_CODIGO = 8;
+const LARGO_DEL_CODIGO = Number(process.env.NEXT_PUBLIC_OTP_LENGTH) || 8;
 
 interface VerificationCodeStepProps {
   email: string;
